@@ -32,7 +32,7 @@ export interface SurveyFormProps {
   closing?: boolean; // the survey just closed, but answers still count for a moment
   n?: number; // responses so far
   onSubmit: (answers: SurveyAnswers) => void;
-  onExit: () => void;
+  onExit?: () => void; // the host's preview closes with it; the survey site has nowhere to go back to
 }
 
 // Intro → one question per screen → review → send. Answers are kept on this device until they're sent.
@@ -107,13 +107,11 @@ export default function SurveyForm({ survey, preview = false, sending = false, c
 
   const missing = qs.filter((q) => q.required && !isAnswered(answers[q.id]));
   const resume = draft && (Object.keys(draft.answers).length > 0 || draft.step !== 'intro') ? draft.step : null;
-  const mode = survey.anonymous ? (
+  const mode = (
     <>
-      🕶️ <b>Anonymous</b> — your name is never saved with your answers
+      🕶️ <b>Anonymous</b> — no login and no name, so your answers can't be traced back to you
       {survey.k > 1 ? `, and organisers only see answers in groups of ${survey.k}+` : ''}.
     </>
-  ) : (
-    <>👤 Your name will be shown with your answers.</>
   );
 
   return (
@@ -154,9 +152,11 @@ export default function SurveyForm({ survey, preview = false, sending = false, c
               </Button>
             )}
           </div>
-          <button type="button" className="text-sm underline opacity-70" onClick={onExit}>
-            Not now
-          </button>
+          {onExit && (
+            <button type="button" className="text-sm underline opacity-70" onClick={onExit}>
+              Not now
+            </button>
+          )}
         </div>
       )}
 
@@ -204,7 +204,7 @@ export default function SurveyForm({ survey, preview = false, sending = false, c
               );
             })}
           </ol>
-          {survey.anonymous && <p className="text-center text-sm opacity-70">🕶️ Sent without your name</p>}
+          <p className="text-center text-sm opacity-70">🕶️ Sent anonymously</p>
           <Button
             big
             variant="primary"

@@ -25,7 +25,7 @@ export default function DangerZone() {
         />
         <Row
           title="Wipe everything"
-          desc="Deletes questions, players, answers, surveys (with their responses) and host sessions (logs everyone out). Use after the event."
+          desc="Deletes questions, players, answers and host sessions (logs everyone out). Surveys are kept: they're run from /surveyAdmin. Use after the event."
           action="Wipe"
           onClick={() => prompt('Type WIPE to delete everything') === 'WIPE' && reset('wipe')}
         />

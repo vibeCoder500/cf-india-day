@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { AdminState } from '../../../shared/protocol';
 import type { AdminSurvey, PublicSurvey, SurveyDraft } from '../../../shared/survey';
 import { DAY_MS, SURVEY_GRACE_MS, SURVEY_LIMITS, endOfIstDay, surveyMinutes, surveyStatus } from '../../../shared/survey';
 import { client, useGame } from '../../lib/client';
@@ -10,6 +9,7 @@ import Modal from '../../components/Modal';
 import SurveyForm from '../../survey/SurveyForm';
 import { istDateTime, timeLeft } from '../../survey/time';
 import LaunchDialog from './LaunchDialog';
+import ResponseCarousel from './ResponseCarousel';
 import SurveyBuilder from './SurveyBuilder';
 import SurveyResults from './SurveyResults';
 import SurveyShare from './SurveyShare';
@@ -17,6 +17,7 @@ import { SURVEY_TEMPLATES } from './templates';
 
 type Status = 'draft' | 'live' | 'closing' | 'closed' | 'finalized';
 type Pop = 'templates' | 'launch' | 'share' | 'preview' | null;
+type View = 'setup' | 'responses' | 'summary';
 
 // "closing" = the 2-minute grace after the deadline: late answers still count, Finalize and new launches wait.
 function statusOf(s: AdminSurvey, now: number): Status {
@@ -32,7 +33,7 @@ const asPublic = (s: AdminSurvey, now: number): PublicSurvey => ({
   closesAt: s.closesAt ?? (s.endOfDay ? endOfIstDay(now + s.days * DAY_MS) : now + s.days * DAY_MS), questions: s.questions,
 });
 
-const modeText = (s: AdminSurvey) => (s.anonymous ? `🕶️ Anonymous${s.k > 1 ? ` · groups of ${s.k}` : ''}` : '👤 Named');
+const modeText = (s: AdminSurvey) => `🕶️ Anonymous${s.k > 1 ? ` · groups of ${s.k}` : ''}`;
 
 function Badge({ s, now }: { s: AdminSurvey; now: number }) {
   const st = statusOf(s, now);
@@ -49,28 +50,11 @@ function Badge({ s, now }: { s: AdminSurvey; now: number }) {
   return <span className={`rounded-full px-3 py-1 text-xs font-bold whitespace-nowrap ${style}`}>{text}</span>;
 }
 
-// Shown in the console header while a survey is live.
-export function LiveSurveyChip({ onOpen }: { onOpen: () => void }) {
-  const surveys = useGame((st) => st.surveys);
-  const now = useServerNow(30_000);
-  const live = surveys?.find((s) => surveyStatus(s, now) === 'live');
-  if (!live || live.closesAt === null) return null;
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="rounded-full bg-saffron/15 px-3 py-1 text-sm font-bold text-saffron ring-1 ring-saffron/40 hover:bg-saffron/25"
-    >
-      📝 Survey live · {live.n} {live.n === 1 ? 'response' : 'responses'} · {timeLeft(live.closesAt - now)} left
-    </button>
-  );
-}
-
-export default function SurveyPanel({ admin }: { admin: AdminState }) {
+export default function SurveyPanel() {
   const surveys = useGame((st) => st.surveys);
   const now = useServerNow(5_000);
   const [openId, setOpenId] = useState<string | null>(null);
-  const [view, setView] = useState<'setup' | 'results'>('setup');
+  const [view, setView] = useState<View>('setup');
   const [pop, setPop] = useState<Pop>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const creating = useRef<{ count: number; at: number } | null>(null); // open the survey the server is about to add
@@ -114,7 +98,7 @@ export default function SurveyPanel({ admin }: { admin: AdminState }) {
     const title = prompt('Survey title (for example "Townhall feedback")')?.trim();
     if (title) create({ id: '', title, intro: '', thanks: '', questions: [] });
   };
-  const open = (id: string, v: 'setup' | 'results' = 'setup', p: Pop = null) => {
+  const open = (id: string, v: View = 'setup', p: Pop = null) => {
     setOpenId(id);
     setView(v);
     setPop(p);
@@ -173,8 +157,8 @@ export default function SurveyPanel({ admin }: { admin: AdminState }) {
       case 'live':
         return (
           <>
-            <Button variant="primary" onClick={() => open(x.id, 'results')}>
-              📊 Results
+            <Button variant="primary" onClick={() => open(x.id, 'responses')}>
+              🃏 Responses
             </Button>
             <Button onClick={() => open(x.id)}>⚙️ Manage</Button>
             <Button onClick={() => open(x.id, 'setup', 'share')}>🔗 Share</Button>
@@ -185,15 +169,15 @@ export default function SurveyPanel({ admin }: { admin: AdminState }) {
         );
       case 'closing':
         return (
-          <Button variant="primary" onClick={() => open(x.id, 'results')}>
-            📊 Results
+          <Button variant="primary" onClick={() => open(x.id, 'responses')}>
+            🃏 Responses
           </Button>
         );
       case 'closed':
         return (
           <>
-            <Button variant="primary" onClick={() => open(x.id, 'results')}>
-              📊 Results
+            <Button variant="primary" onClick={() => open(x.id, 'responses')}>
+              🃏 Responses
             </Button>
             <Button onClick={() => act.extend(x, 'Reopen')}>🔁 Reopen…</Button>
             <Button onClick={() => act.finalize(x)}>🔐 Finalize</Button>
@@ -206,8 +190,8 @@ export default function SurveyPanel({ admin }: { admin: AdminState }) {
       case 'finalized':
         return (
           <>
-            <Button variant="primary" onClick={() => open(x.id, 'results')}>
-              📊 Results
+            <Button variant="primary" onClick={() => open(x.id, 'responses')}>
+              🃏 Responses
             </Button>
             <Button onClick={() => act.duplicate(x)}>⧉ Duplicate</Button>
             <Button variant="danger" onClick={() => act.remove(x)}>
@@ -229,7 +213,7 @@ export default function SurveyPanel({ admin }: { admin: AdminState }) {
             </Button>
             <Button onClick={() => setPop('templates')}>📚 Templates</Button>
           </div>
-          <p className="-mt-2 text-sm opacity-70">Launch a survey once; people answer whenever they open the app, until it closes.</p>
+          <p className="-mt-2 text-sm opacity-70">Launch a survey once: people answer at /survey whenever they like, until it closes. No logins, no names.</p>
           {surveys.length === 0 ? (
             <div className="flex flex-col items-center gap-4 rounded-2xl bg-white/5 p-8 text-center">
               <p className="text-lg opacity-80">No surveys yet</p>
@@ -295,7 +279,7 @@ export default function SurveyPanel({ admin }: { admin: AdminState }) {
           </div>
         </Modal>
       )}
-      {s && pop === 'launch' && <LaunchDialog s={s} admin={admin} onClose={() => setPop(null)} onLaunched={() => setPop('share')} />}
+      {s && pop === 'launch' && <LaunchDialog s={s} onClose={() => setPop(null)} onLaunched={() => setPop('share')} />}
       {s && pop === 'share' && <SurveyShare s={s} copy={copy} onClose={() => setPop(null)} />}
       {notice && (
         <div role="status" className="animate-pop fixed inset-x-4 bottom-24 z-50 mx-auto max-w-xs rounded-2xl bg-white px-4 py-3 text-center font-bold text-night shadow-2xl">
@@ -327,8 +311,8 @@ function Detail({
 }: {
   s: AdminSurvey;
   now: number;
-  view: 'setup' | 'results';
-  setView: (v: 'setup' | 'results') => void;
+  view: View;
+  setView: (v: View) => void;
   onBack: () => void;
   onPop: (p: Pop) => void;
   act: Actions;
@@ -336,7 +320,7 @@ function Detail({
 }) {
   const st = statusOf(s, now);
   const launched = s.opensAt !== null;
-  const tab = (v: 'setup' | 'results', label: string) => (
+  const tab = (v: View, label: string) => (
     <button
       type="button"
       onClick={() => setView(v)}
@@ -357,12 +341,15 @@ function Detail({
       <h2 className="font-display text-2xl leading-tight font-bold">{s.title}</h2>
       {launched && (
         <nav className="flex gap-2" aria-label="Survey sections">
-          {tab('results', '📊 Results')}
+          {tab('responses', '🃏 Responses')}
+          {tab('summary', '📊 Summary')}
           {tab('setup', '⚙️ Manage')}
         </nav>
       )}
 
-      {launched && view === 'results' ? (
+      {launched && view === 'responses' ? (
+        <ResponseCarousel s={s} live={st === 'live'} />
+      ) : launched && view === 'summary' ? (
         <SurveyResults s={s} live={st === 'live'} closing={st === 'closing'} copy={copy} />
       ) : (
         <>

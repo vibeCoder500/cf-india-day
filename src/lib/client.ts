@@ -21,7 +21,8 @@ export interface ClientState {
   error: { code: ErrorCode; message: string; at: number } | null;
   offset: number; // serverNow - Date.now()
   pending: Record<string, true>; // answer refs awaiting ack
-  survey: PublicSurvey | null; // the live survey (sent to every socket, joined or not)
+  survey: PublicSurvey | null; // the live survey (sent to the survey site, which never logs in)
+  surveyHeard: boolean; // the server has said which survey is live (possibly none)
   surveyMe: Record<string, { done: boolean; n: number }>; // per survey id: has this device responded? (+ total so far)
   surveySending: { ref: string; sid: string } | null; // a submission awaiting its ack
   surveys: AdminSurvey[] | null; // hosts
@@ -30,10 +31,22 @@ export interface ClientState {
 
 const SESSION_KEY = 'cfid.session.v1';
 
+// The survey site lives at /survey (respond, never logged in) and /surveyAdmin (the hosts' studio). Neither touches the
+// game: a phone's saved game session is left alone, and the studio only uses a host session.
+const PATH = location.pathname.toLowerCase();
+export const SURVEY_ROUTE: 'respond' | 'admin' | null = PATH.startsWith('/surveyadmin')
+  ? 'admin'
+  : /^\/surveys?(\/|$)/.test(PATH)
+    ? 'respond'
+    : null;
+
 function loadSession(): Session | null {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
-    return raw ? (JSON.parse(raw) as Session) : null;
+    const s = raw ? (JSON.parse(raw) as Session) : null;
+    if (SURVEY_ROUTE === 'respond') return null;
+    if (SURVEY_ROUTE === 'admin') return s?.role === 'admin' ? s : null;
+    return s;
   } catch {
     return null;
   }
@@ -58,8 +71,8 @@ const FRIENDLY: Partial<Record<ErrorCode, string>> = {
 
 const SURVEY_FRIENDLY: Partial<Record<ErrorCode, string>> = {
   CLOSED: 'Sorry, this survey has closed ⏰',
-  NAME_TAKEN: 'Someone with your name already responded 🤔',
   LIMIT: 'This survey is full',
+  RATE_LIMIT: 'Too many responses from here — reload the page and try again',
   BAD_REQUEST: "Hmm, that didn't work — please check your answers",
 };
 
@@ -69,7 +82,7 @@ const randomRef = () => Math.random().toString(36).slice(2, 10) + Date.now().toS
 class GameClient {
   state: ClientState = {
     status: 'connecting', session: loadSession(), view: null, admin: null, error: null, offset: 0, pending: {},
-    survey: null, surveyMe: {}, surveySending: null, surveys: null, surveyData: null,
+    survey: null, surveyHeard: false, surveyMe: {}, surveySending: null, surveys: null, surveyData: null,
   };
   private listeners = new Set<() => void>();
   private rxListeners = new Set<(r: Record<string, number>) => void>();
@@ -160,10 +173,10 @@ class GameClient {
     this.set({ error: null });
   }
 
-  // Players only: the server answers with survey:me. Anonymous sockets can't ask (they haven't joined).
+  // The survey site only: the server answers with survey:me (has this device responded?).
   surveyCheck() {
     const s = this.state.survey;
-    if (s && this.state.session?.role === 'player') this.send({ t: 'survey:check', sid: s.id, device: deviceId() });
+    if (s && SURVEY_ROUTE === 'respond') this.send({ t: 'survey:check', sid: s.id, device: deviceId() });
   }
 
   // `sid` comes from the form, which keeps working for a moment after the survey closes (the server's grace period).
@@ -177,7 +190,7 @@ class GameClient {
     }, 5000);
     setTimeout(() => {
       if (this.state.surveySending?.ref !== ref) return;
-      this.set({ surveySending: null, error: { code: 'BAD_REQUEST', message: "Couldn't reach the game — check your connection and tap Send again", at: Date.now() } });
+      this.set({ surveySending: null, error: { code: 'BAD_REQUEST', message: "Couldn't reach the server — check your connection and tap Send again", at: Date.now() } });
     }, 12_000);
   }
 
@@ -273,7 +286,7 @@ class GameClient {
         this.celebrateListeners.forEach((fn) => fn());
         return;
       case 'survey':
-        this.set({ survey: m.survey, offset });
+        this.set({ survey: m.survey, surveyHeard: true, offset });
         this.surveyCheck(); // also after a host reset, so a stale "done" clears
         return;
       case 'survey:me':

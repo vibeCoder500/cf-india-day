@@ -1,7 +1,7 @@
 import type { ErrorCode, Results, ServerMsg } from '../shared/protocol';
 import type { AdminSurvey, PublicSurvey, SurveyAnswers, SurveyCard, SurveyClientMsg, SurveyData, SurveyQuestion } from '../shared/survey';
 import {
-  AUTO_FINALIZE_DAYS, DAY_MS, DEFAULT_K, DEVICE_RE, K_CHOICES, SURVEY_GRACE_MS, SURVEY_LIMITS, endOfIstDay, istDay, surveyStatus,
+  AUTO_FINALIZE_DAYS, DAY_MS, DEVICE_RE, SURVEY_GRACE_MS, SURVEY_LIMITS, endOfIstDay, istDay, surveyStatus,
 } from '../shared/survey';
 import { cut } from './validate';
 import { parseSurveyAnswers, parseSurveyDraft } from './survey-validate';
@@ -9,10 +9,13 @@ import { parseSurveyAnswers, parseSurveyDraft } from './survey-validate';
 // What the survey module needs from the GameRoom. It never reads or writes game state.
 export interface SurveyHost {
   sockets(): { ws: WebSocket; kind: 'anon' | 'player' | 'admin' }[];
-  player(pid: string): { name: string; key: string; avatar: string; kicked: boolean } | null;
 }
 
-export type SurveyCaller = { kind: 'player'; pid: string } | { kind: 'admin' };
+// Respondents never log in (the /survey site), so everyone who isn't a host is just "public".
+export type SurveyCaller = { kind: 'public' } | { kind: 'admin' };
+
+// Successful sends per connection: a real person sends one; this only slows down a script on a single socket.
+const SENDS_PER_SOCKET = 3;
 
 // Stored as JSON in surveys.data. The fingerprint key lives only in surveys.salt and never leaves this file.
 type Rec = AdminSurvey;
@@ -68,6 +71,7 @@ export class Surveys {
   private cache = new Map<string, Resp[]>(); // parsed responses, loaded when a host first asks
   private timer: ReturnType<typeof setTimeout> | null = null;
   private lastPublic = ''; // the live survey as phones last saw it
+  private sends = new WeakMap<WebSocket, number>();
 
   constructor(
     private ctx: DurableObjectState,
@@ -84,6 +88,12 @@ export class Surveys {
     this.salts.clear();
     for (const r of this.sql.exec<SurveyRow>('SELECT data, salt FROM surveys')) {
       const s = JSON.parse(r.data) as Rec;
+      // Responses are shown one by one now (no groups). Older surveys switch over unless some responses are still
+      // sealed: those were promised a group, so they keep it until they're revealed at closing.
+      if (s.k > 1 && s.pending === 0) {
+        s.k = 1;
+        this.sql.exec('UPDATE surveys SET data = ? WHERE id = ?', JSON.stringify(s), s.id);
+      }
       this.list.push(s);
       if (r.salt) this.salts.set(s.id, r.salt);
     }
@@ -105,20 +115,13 @@ export class Surveys {
     this.send(ws, this.listMsg());
   }
 
-  // After a wipe: everyone learns there is no survey any more.
-  announce() {
-    this.changed(true);
-  }
-
   // ---------- messages ----------
 
   async onMessage(ws: WebSocket, caller: SurveyCaller, msg: SurveyClientMsg) {
     this.sweep(); // auto-finalize happens on the first activity after it is due
-    if (caller.kind === 'player') {
-      const p = this.host.player(caller.pid);
-      if (!p || p.kicked) return;
+    if (caller.kind === 'public') {
       if (msg.t === 'survey:check') return this.check(ws, msg.sid, msg.device);
-      if (msg.t === 'survey:submit') return this.submit(ws, caller.pid, msg);
+      if (msg.t === 'survey:submit') return this.submit(ws, msg);
       return this.fail(ws, 'NOT_ALLOWED', 'Not allowed');
     }
     switch (msg.t) {
@@ -167,7 +170,8 @@ export class Surveys {
     this.send(ws, { t: 'survey:me', sid: s.id, done: fp !== null && this.hasBallot(s.id, fp.hs[0]), n: s.n });
   }
 
-  private async submit(ws: WebSocket, pid: string, msg: Extract<SurveyClientMsg, { t: 'survey:submit' }>) {
+  // No logins: one response per device, recognised by a keyed fingerprint of the device id.
+  private async submit(ws: WebSocket, msg: Extract<SurveyClientMsg, { t: 'survey:submit' }>) {
     const { ref, device } = msg;
     if (typeof ref !== 'string' || !ref || ref.length > 40) return;
     const ack = (ok: boolean, code?: ErrorCode) => this.send(ws, { t: 'survey:ack', ref, ok, code });
@@ -176,48 +180,37 @@ export class Surveys {
     if (!s || !this.accepting(s, Date.now())) return ack(false, 'CLOSED');
     const answers = parseSurveyAnswers(s.questions, msg.answers);
     if (!answers) return ack(false, 'BAD_REQUEST');
-    const who = this.host.player(pid);
-    if (!who) return;
-    const me = { key: who.key, name: who.name, avatar: who.avatar }; // one snapshot for the ballot and the named response
+    if ((this.sends.get(ws) ?? 0) >= SENDS_PER_SOCKET) return ack(false, 'RATE_LIMIT');
 
     // Fingerprinting awaits crypto, and other messages can run meanwhile (input gates only cover storage). If a reset
     // swapped the secret during the await, fingerprint again with the new one, so dedupe never uses a stale key.
     let fp: { salt: string; hs: string[] } | null = null;
     for (let i = 0; i < 3 && (fp === null || this.salts.get(s.id) !== fp.salt); i++) {
-      fp = await this.fingerprints(s, [`d:${device}`, `n:${me.key}`]);
+      fp = await this.fingerprints(s, [`d:${device}`]);
       if (!fp) break;
     }
 
     // Synchronous from here on: no other message can run between the checks and the insert.
     const now = Date.now();
     if (!fp || this.salts.get(s.id) !== fp.salt || this.byId(s.id) !== s || !this.accepting(s, now)) return ack(false, 'CLOSED');
-    const p = this.host.player(pid);
-    if (!p || p.kicked || p.key !== me.key) return ack(false, 'BAD_REQUEST'); // left, removed or renamed meanwhile: send again
-    const [hd, hn] = fp.hs;
+    const [hd] = fp.hs;
     if (this.hasBallot(s.id, hd)) return ack(false, 'ALREADY_ANSWERED'); // this device (also a retry whose ack got lost)
-    if (this.hasBallot(s.id, hn)) return ack(false, 'NAME_TAKEN'); // someone with this name, on another device
     if (s.n >= SURVEY_LIMITS.responses) return ack(false, 'LIMIT');
     const sealed = s.anonymous && s.k > 1;
-    const r: Resp = {
-      id: randomId(),
-      released: !sealed,
-      at: s.anonymous ? null : now,
-      who: s.anonymous ? null : { name: me.name, avatar: me.avatar },
-      answers,
-      hidden: false,
-    };
+    const r: Resp = { id: randomId(), released: !sealed, at: s.anonymous ? null : now, who: null, answers, hidden: false };
     this.ctx.storage.transactionSync(() => {
-      this.sql.exec('INSERT INTO survey_ballots (sid, h) VALUES (?, ?), (?, ?)', s.id, hd, s.id, hn);
+      this.sql.exec('INSERT INTO survey_ballots (sid, h) VALUES (?, ?)', s.id, hd);
       this.sql.exec(
-        'INSERT INTO survey_responses (sid, id, released, at, who, answers) VALUES (?, ?, ?, ?, ?, ?)',
-        s.id, r.id, r.released ? 1 : 0, r.at, r.who ? JSON.stringify(r.who) : null, JSON.stringify(answers),
+        'INSERT INTO survey_responses (sid, id, released, at, who, answers) VALUES (?, ?, ?, ?, NULL, ?)',
+        s.id, r.id, r.released ? 1 : 0, r.at, JSON.stringify(answers),
       );
       this.sql.exec('INSERT INTO survey_days (sid, day, n) VALUES (?, ?, 1) ON CONFLICT (sid, day) DO UPDATE SET n = n + 1', s.id, istDay(now));
     });
+    this.sends.set(ws, (this.sends.get(ws) ?? 0) + 1);
     this.cache.get(s.id)?.push(r);
     s.n++;
     if (sealed) s.pending++;
-    // Keep at least k sealed while live, so every reveal (the last one at closing too) holds k or more responses.
+    // Older grouped surveys only: keep at least k sealed while live, so every reveal holds k or more responses.
     if (sealed && s.pending >= 2 * s.k) this.reveal(s, s.k);
     this.bump(s);
     ack(true);
@@ -316,7 +309,7 @@ export class Surveys {
     if (!s) {
       if (this.list.length >= SURVEY_LIMITS.surveys) return this.fail(ws, 'LIMIT', `Up to ${SURVEY_LIMITS.surveys} surveys — delete an old one first`);
       const rec: Rec = {
-        ...d, id: randomId(), createdAt: Date.now(), anonymous: true, k: DEFAULT_K, days: 3, endOfDay: true,
+        ...d, id: randomId(), createdAt: Date.now(), anonymous: true, k: 1, days: 3, endOfDay: true,
         opensAt: null, closesAt: null, finalized: false, rev: 0, n: 0, pending: 0,
       };
       this.list.push(rec);
@@ -339,12 +332,12 @@ export class Surveys {
     const days = msg.days;
     if (!Number.isInteger(days) || days < 1 || days > SURVEY_LIMITS.days) return this.fail(ws, 'BAD_REQUEST', `Pick 1–${SURVEY_LIMITS.days} days`);
     const now = Date.now();
-    const anonymous = msg.anonymous !== false;
     const endOfDay = msg.endOfDay !== false;
     const closesAt = endOfDay ? endOfIstDay(now + days * DAY_MS) : now + days * DAY_MS;
+    // Always anonymous (nobody logs in to answer) and shown one by one, as each response arrives.
     const patch: Partial<Rec> = {
-      anonymous,
-      k: anonymous ? (K_CHOICES.includes(msg.k) ? msg.k : DEFAULT_K) : 1,
+      anonymous: true,
+      k: 1,
       days: Math.ceil((closesAt - now) / DAY_MS),
       endOfDay,
       opensAt: now,
@@ -404,7 +397,7 @@ export class Surveys {
     if (this.list.length >= SURVEY_LIMITS.surveys) return this.fail(ws, 'LIMIT', `Up to ${SURVEY_LIMITS.surveys} surveys — delete an old one first`);
     const copy: Rec = {
       id: randomId(), title: cut(`${s.title} (copy)`, SURVEY_LIMITS.title), intro: s.intro, thanks: s.thanks,
-      questions: structuredClone(s.questions), createdAt: Date.now(), anonymous: s.anonymous, k: s.k, days: s.days,
+      questions: structuredClone(s.questions), createdAt: Date.now(), anonymous: true, k: 1, days: s.days,
       endOfDay: s.endOfDay, opensAt: null, closesAt: null, finalized: false, rev: 0, n: 0, pending: 0,
     };
     this.list.push(copy);
@@ -514,8 +507,9 @@ export class Surveys {
     this.sql.exec('UPDATE surveys SET data = ? WHERE id = ?', JSON.stringify(s), s.id);
   }
 
-  // Hosts get the (small) list and refetch results whose rev moved. Phones only hear about the live survey, and only
-  // when what they'd see changed (or when forced, so they re-check "already responded" after a reset).
+  // Hosts get the (small) list and refetch results whose rev moved. The survey site (sockets that never log in) only
+  // hears about the live survey, and only when what it would see changed (or when forced, so "already responded" is
+  // re-checked after a reset). Game players and hosts don't need it.
   private changed(forcePlayers = false) {
     this.toPlayers(forcePlayers);
     this.toAdminsSoon();
@@ -527,7 +521,7 @@ export class Surveys {
     if (!force && key === this.lastPublic) return;
     this.lastPublic = key;
     const m = JSON.stringify({ t: 'survey', now: Date.now(), survey } satisfies ServerMsg);
-    for (const c of this.host.sockets()) if (c.kind !== 'admin') this.raw(c.ws, m);
+    for (const c of this.host.sockets()) if (c.kind === 'anon') this.raw(c.ws, m);
   }
 
   private toAdminsSoon() {

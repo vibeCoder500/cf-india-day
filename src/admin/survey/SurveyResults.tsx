@@ -13,7 +13,7 @@ type Copy = (text: string, what: string) => void;
 
 // Results are pulled: once when opened, again whenever the survey's rev moves (at most every 2 s), and once more
 // right after the closing grace period, when the sealed pool is revealed.
-function useSurveyData(s: AdminSurvey): SurveyData | null {
+export function useSurveyData(s: AdminSurvey): SurveyData | null {
   const data = useGame((st) => st.surveyData);
   const lastAsk = useRef(0);
   const fresh = data?.sid === s.id && data.rev === s.rev;
@@ -39,12 +39,12 @@ function useSurveyData(s: AdminSurvey): SurveyData | null {
 }
 
 const dayLabel = (day: string) => new Date(`${day}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-const hide = (s: AdminSurvey, rid: string, hidden: boolean) => client.send({ t: 'survey:hide', id: s.id, rid, hidden });
+export const hide = (s: AdminSurvey, rid: string, hidden: boolean) => client.send({ t: 'survey:hide', id: s.id, rid, hidden });
 
+// The summary: KPIs, charts per question, comments and exports. Individual responses live in ResponseCarousel.
 export default function SurveyResults({ s, live, closing, copy }: { s: AdminSurvey; live: boolean; closing: boolean; copy: Copy }) {
   const d = useSurveyData(s);
   const [formats, setFormats] = useState<Record<string, Display>>({});
-  const [cardsOpen, setCardsOpen] = useState(false);
   if (!d) return <p className="rounded-2xl bg-white/5 p-6 text-center opacity-80">Loading results… 📊</p>;
 
   const visible = d.released - d.hidden;
@@ -154,38 +154,6 @@ export default function SurveyResults({ s, live, closing, copy }: { s: AdminSurv
           </section>
         );
       })}
-
-      <details className="rounded-2xl bg-white/5 p-4" onToggle={(e) => setCardsOpen(e.currentTarget.open)}>
-        <summary className="cursor-pointer font-display text-lg font-bold">👥 Individual responses ({d.released})</summary>
-        {cardsOpen && (
-          <div className="mt-3 flex flex-col gap-3">
-            {s.anonymous && <p className="text-sm opacity-70">Shown in random order, without names or times.</p>}
-            {d.cards.length === 0 && <p className="opacity-70">Nothing to show yet.</p>}
-            {d.cards.map((c, i) => (
-              <article key={c.id} className={`rounded-xl bg-black/20 p-3 ${c.hidden ? 'opacity-50' : ''}`}>
-                <header className="mb-2 flex items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate font-bold">
-                    {c.who ? `${c.who.avatar} ${c.who.name}` : `Response ${i + 1}`}
-                    {c.at !== null && <span className="ml-2 text-xs font-normal opacity-70">{istTime(c.at)}</span>}
-                    {c.hidden && <span className="ml-2 text-xs text-amber-300">hidden</span>}
-                  </span>
-                  <Button variant={c.hidden ? 'secondary' : 'danger'} onClick={() => hide(s, c.id, !c.hidden)}>
-                    {c.hidden ? 'Unhide' : 'Hide'}
-                  </Button>
-                </header>
-                <dl className="flex flex-col gap-1 text-sm">
-                  {s.questions.map((q, j) => (
-                    <div key={q.id} className="grid grid-cols-[2.5rem_1fr] gap-1">
-                      <dt className="opacity-60">Q{j + 1}</dt>
-                      <dd className="break-words">{answerLabel(q, c.answers[q.id]) || <span className="opacity-50">—</span>}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </article>
-            ))}
-          </div>
-        )}
-      </details>
     </div>
   );
 }

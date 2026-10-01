@@ -119,7 +119,6 @@ export class GameRoom extends DurableObject<Env> {
     if (this.game.qid) this.loadAnswers(this.game.qid);
     this.surveys = new Surveys(ctx, this.sql, {
       sockets: () => this.conns().map(({ ws, att }) => ({ ws, kind: att?.kind ?? 'anon' })),
-      player: (pid) => this.players.get(pid) ?? null,
     });
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
   }
@@ -132,7 +131,7 @@ export class GameRoom extends DurableObject<Env> {
     server.serializeAttachment(att ?? { kind: 'anon', joins: 0 });
     if (att) this.welcome(server, att);
     else if (token) this.fail(server, this.byToken.has(token) ? 'KICKED' : 'SESSION_INVALID', 'Please join again');
-    if (!att) this.surveys.helloPublic(server); // the join screen can mention the open survey
+    if (!att) this.surveys.helloPublic(server); // the survey site answers the live survey without logging in
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -152,10 +151,12 @@ export class GameRoom extends DurableObject<Env> {
     try {
       if (att.kind === 'anon') {
         if (msg.t === 'join') this.join(ws, att, msg);
+        // The survey site (/survey) never logs in: respondents are anonymous, one response per device.
+        else if (msg.t === 'survey:check' || msg.t === 'survey:submit') await this.surveys.onMessage(ws, { kind: 'public' }, msg);
         return;
       }
       if (isSurveyClientMsg(msg)) {
-        return await this.surveys.onMessage(ws, att.kind === 'admin' ? { kind: 'admin' } : { kind: 'player', pid: att.pid }, msg);
+        return await this.surveys.onMessage(ws, att.kind === 'admin' ? { kind: 'admin' } : { kind: 'public' }, msg);
       }
       if (msg.t === 'sync') return this.welcome(ws, att);
       if (msg.t === 'leave') return this.leave(ws, att);
@@ -196,11 +197,12 @@ export class GameRoom extends DurableObject<Env> {
     return true;
   }
 
-  private join(ws: WebSocket, att: { kind: 'anon'; joins: number }, msg: { name: string; avatar: string }) {
+  private join(ws: WebSocket, att: { kind: 'anon'; joins: number }, msg: { name: string; avatar: string; hostOnly?: boolean }) {
     if (att.joins >= 10) return this.fail(ws, 'RATE_LIMIT', 'Too many attempts — please refresh the page');
     ws.serializeAttachment({ kind: 'anon', joins: att.joins + 1 });
     const parsed = parseName(msg.name, this.env.ADMIN_SUFFIX || DEFAULT_ADMIN_SUFFIX);
     if (!parsed.ok) return this.fail(ws, 'NAME_INVALID', parsed.error);
+    if (msg.hostOnly === true && !parsed.admin) return this.fail(ws, 'NOT_ALLOWED', "That name doesn't have host access");
     if (parsed.admin) {
       const token = crypto.randomUUID();
       this.sql.exec('INSERT INTO admins (token, name) VALUES (?, ?)', token, parsed.name);
@@ -254,7 +256,6 @@ export class GameRoom extends DurableObject<Env> {
       if (!p) return;
       this.send(ws, { t: 'welcome', token: p.token, role: 'player', id: p.id, name: p.name, avatar: p.avatar });
       this.raw(ws, this.viewMsg(p));
-      this.surveys.helloPublic(ws);
       this.touch('players', 'live');
     }
   }
@@ -799,9 +800,10 @@ export class GameRoom extends DurableObject<Env> {
     if (scope !== 'answers' && scope !== 'players' && scope !== 'wipe') return;
     await this.ctx.storage.deleteAlarm();
     if (scope === 'wipe') {
-      await this.ctx.storage.deleteAll();
-      for (const s of SCHEMA) this.sql.exec(s);
-      this.surveys.init();
+      // Game data only. Surveys live in their own tables and are run from /surveyAdmin, so a game wipe keeps them.
+      this.ctx.storage.transactionSync(() => {
+        for (const table of ['meta', 'players', 'admins', 'questions', 'answers']) this.sql.exec(`DELETE FROM ${table}`);
+      });
       this.questions = [];
       this.admins.clear();
     } else {
@@ -839,7 +841,6 @@ export class GameRoom extends DurableObject<Env> {
     }
     this.broadcast();
     this.touch('questions', 'players');
-    if (scope === 'wipe') this.surveys.announce();
   }
 
   // ---------- views ----------

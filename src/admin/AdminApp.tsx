@@ -11,14 +11,12 @@ import ImportExport from './ImportExport';
 import LivePanel from './LivePanel';
 import PeoplePanel from './PeoplePanel';
 import QuestionList from './QuestionList';
-import SurveyPanel, { LiveSurveyChip } from './survey/SurveyPanel';
 
-type Tab = 'live' | 'questions' | 'people' | 'survey' | 'more';
+type Tab = 'live' | 'questions' | 'people' | 'more';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'live', label: '🎛️ Live' },
   { id: 'questions', label: '❓ Questions' },
   { id: 'people', label: '👥 People' },
-  { id: 'survey', label: '📝 Survey' },
   { id: 'more', label: '⚙️ More' },
 ];
 
@@ -64,7 +62,6 @@ export default function AdminApp() {
           <p className="text-sm opacity-80">
             🟢 {admin.online} online · {admin.total} joined
           </p>
-          <LiveSurveyChip onOpen={() => setTab('survey')} />
           <div className="ml-auto flex flex-wrap items-center gap-2">
             {/* Its own window, so it can be shared in the meeting or dragged to the projector while this tab stays private. */}
             <Button onClick={() => window.open('/present', 'cfid-present', 'popup,width=1280,height=720')}>Open presenter ↗</Button>
@@ -97,7 +94,6 @@ export default function AdminApp() {
           </nav>
           {right === 'questions' && <QuestionList admin={admin} eventId={eventId} onSelectEvent={setPicked} />}
           {right === 'people' && <PeoplePanel players={admin.players} />}
-          {right === 'survey' && <SurveyPanel admin={admin} />}
           {right === 'more' && (
             <div className="flex flex-col gap-4">
               <section className="rounded-2xl bg-white/5 p-4">
@@ -120,14 +116,14 @@ export default function AdminApp() {
 
       <nav
         aria-label="Sections"
-        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-white/10 bg-night/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-white/10 bg-night/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
       >
         {TABS.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={`py-3 text-xs font-bold ${tab === t.id ? 'text-saffron' : 'opacity-70'}`}
+            className={`py-3 text-sm font-bold ${tab === t.id ? 'text-saffron' : 'opacity-70'}`}
           >
             {t.label}
           </button>

@@ -182,7 +182,7 @@ export type ServerMsg =
 
 export type ClientMsg =
   // anyone (anonymous socket)
-  | { t: 'join'; name: string; avatar: string }
+  | { t: 'join'; name: string; avatar: string; hostOnly?: boolean } // hostOnly: the /surveyAdmin sign-in, never a player
   // players
   | { t: 'rename'; name: string }
   | { t: 'avatar'; avatar: string }

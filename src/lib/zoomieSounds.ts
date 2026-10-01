@@ -1,8 +1,8 @@
-import type { Species } from '../components/Critter';
+import type { Person } from '../components/Caricature';
 
 // The zoomies' funny sounds, synthesised so there are no audio files to ship.
 export type Sfx = { ctx: AudioContext; out: GainNode; noise: AudioBuffer; busyUntil: number; nap?: ReturnType<typeof setTimeout> };
-// One animal's sound channel, panned to where it is on screen.
+// One runner's sound channel, panned to where it is on screen.
 export type Track = { ctx: BaseAudioContext; dest: AudioNode; noise: AudioBuffer };
 
 let sfx: Sfx | null = null;
@@ -70,7 +70,7 @@ export function restAfter(a: Sfx, end: number) {
   napSoon(a);
 }
 
-// Pans through [time, pan] points (pan: -1 left … 1 right), following the animal across the screen.
+// Pans through [time, pan] points (pan: -1 left … 1 right), following the runner across the screen.
 export function track(a: Sfx, path: [at: number, pan: number][]): Track {
   const panner = a.ctx.createStereoPanner();
   panner.pan.setValueAtTime(path[0][1], path[0][0]);
@@ -105,6 +105,14 @@ function glide(t: Track, type: OscillatorType, at: number, points: [number, numb
 function bandpass(t: Track, hz: number, q: number): BiquadFilterNode {
   const f = t.ctx.createBiquadFilter();
   f.type = 'bandpass';
+  f.frequency.value = hz;
+  f.Q.value = q;
+  return f;
+}
+
+function lowpass(t: Track, hz: number, q = 0.8): BiquadFilterNode {
+  const f = t.ctx.createBiquadFilter();
+  f.type = 'lowpass';
   f.frequency.value = hz;
   f.Q.value = q;
   return f;
@@ -162,38 +170,57 @@ export function whee(t: Track, at: number, dur: number, from: number, peak: numb
   return end;
 }
 
-// Each animal's own little cry. Returns when it ends.
-export function voice(t: Track, species: Species, at: number): number {
-  switch (species) {
-    case 'kitten': {
-      // "mee-ow": a nasal buzz whose vowel slides from "ee" to "ow"
-      const vowel = bandpass(t, 1800, 2);
-      vowel.frequency.setValueAtTime(1800, at);
-      vowel.frequency.exponentialRampToValueAtTime(2400, at + 0.12);
-      vowel.frequency.exponentialRampToValueAtTime(1000, at + 0.5);
-      vowel.connect(env(t, at, 1.2, 0.04, at + 0.55, 0.28));
-      glide(t, 'sawtooth', at, [[0, 560], [0.18, 840], [0.55, 480]], vowel);
+// Each costume's signature sound when it's closest. Returns when it ends.
+export function voice(t: Track, who: Person, at: number): number {
+  switch (who) {
+    case 'rockstar': {
+      // A power chord through a wah pedal.
+      const wah = bandpass(t, 450, 4);
+      wah.frequency.setValueAtTime(450, at);
+      wah.frequency.exponentialRampToValueAtTime(2200, at + 0.18);
+      wah.frequency.exponentialRampToValueAtTime(600, at + 0.5);
+      wah.connect(env(t, at, 0.9, 0.01, at + 0.55, 0.2));
+      for (const hz of [147, 220, 294]) glide(t, 'sawtooth', at, [[0, hz], [0.55, hz * 0.98]], wah);
       return at + 0.55;
     }
-    case 'puppy':
-      // "yip-yip!"
-      for (const d of [0, 0.17]) {
-        const mouth = bandpass(t, 1300, 1.5);
-        mouth.connect(env(t, at + d, 1, 0.012, at + d + 0.13, 0.04));
-        glide(t, 'sawtooth', at + d, [[0, 480], [0.03, 920], [0.12, 420]], mouth);
+    case 'chef':
+      // A pot lid's "clang!": a few out-of-tune partials ringing out.
+      for (const [hz, level, ring] of [[520, 0.35, 0.6], [1310, 0.25, 0.45], [2210, 0.18, 0.3], [3450, 0.1, 0.2]]) {
+        glide(t, 'sine', at, [[0, hz], [ring, hz * 0.995]], env(t, at, level, 0.003, at + ring));
       }
-      return at + 0.3;
-    case 'squirrel':
-      // chitter-chitter
-      for (let i = 0; i < 6; i++) {
+      return at + 0.6;
+    case 'wizard':
+      // A magic twinkle running up the scale.
+      [1047, 1319, 1568, 2093, 2637, 3136].forEach((hz, i) => {
         const s = at + i * 0.055;
-        glide(t, 'triangle', s, [[0, 3400], [0.035, 2200]], env(t, s, 0.65, 0.004, s + 0.04));
+        glide(t, 'sine', s, [[0, hz], [0.18, hz * 1.01]], env(t, s, 0.35, 0.005, s + 0.2));
+      });
+      return at + 0.5;
+    case 'hero':
+      // "Ta-daa!": a two-note brass fanfare.
+      for (const [d, hz, len] of [[0, 392, 0.12], [0.14, 523, 0.42]]) {
+        const brass = lowpass(t, 2600);
+        brass.connect(env(t, at + d, 0.18, 0.015, at + d + len, len * 0.6));
+        glide(t, 'square', at + d, [[0, hz], [len, hz]], brass);
       }
-      return at + 0.34;
-    case 'capybara':
-      // "wheek wheek", like its guinea-pig cousins
-      for (const [d, up] of [[0, 1], [0.26, 1.12]]) {
-        glide(t, 'sine', at + d, [[0, 950 * up], [0.12, 1700 * up], [0.2, 1500 * up]], env(t, at + d, 0.5, 0.02, at + d + 0.22, 0.08));
+      return at + 0.56;
+    case 'viking': {
+      // A blast on a horn.
+      const horn = lowpass(t, 900, 1.2);
+      horn.connect(env(t, at, 0.25, 0.06, at + 0.7, 0.35));
+      glide(t, 'sawtooth', at, [[0, 98], [0.1, 110], [0.7, 104]], horn);
+      glide(t, 'sawtooth', at, [[0, 147], [0.1, 165], [0.7, 156]], horn);
+      return at + 0.7;
+    }
+    case 'captain':
+      // A sea-shanty "oom-pah" on her accordion, with the musette's slightly detuned second reed.
+      for (const [d, chord] of [[0, [196, 247, 294]], [0.24, [262, 330, 392]]] as const) {
+        const reed = lowpass(t, 1800, 1);
+        reed.connect(env(t, at + d, 0.12, 0.02, at + d + 0.22, 0.1));
+        for (const hz of chord) {
+          glide(t, 'sawtooth', at + d, [[0, hz], [0.22, hz]], reed);
+          glide(t, 'sawtooth', at + d, [[0, hz * 1.006], [0.22, hz * 1.006]], reed);
+        }
       }
       return at + 0.5;
   }

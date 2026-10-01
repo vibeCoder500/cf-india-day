@@ -14,8 +14,6 @@ export default function Join() {
   const [example, setExample] = useState(0);
   const error = useGame((s) => s.error);
   const status = useGame((s) => s.status);
-  const survey = useGame((s) => s.survey);
-  const surveyOpen = survey !== null && Date.now() + client.state.offset < survey.closesAt;
   const trimmed = name.trim();
   const valid = Array.from(trimmed).length >= LIMITS.nameMin;
   const busy = sent && !error;
@@ -39,11 +37,6 @@ export default function Join() {
         <h1 className="text-center font-display text-4xl font-extrabold">
           Who's joining the party? <span className="inline-block animate-wiggle">🎉</span>
         </h1>
-        {surveyOpen && (
-          <p className="rounded-2xl bg-saffron/15 px-4 py-3 text-center font-semibold ring-1 ring-saffron/40">
-            📝 <b>{survey.title}</b> is open — join below to share your feedback
-          </p>
-        )}
         <form onSubmit={submit} className="flex flex-col gap-5">
           <input
             autoFocus

@@ -10,6 +10,28 @@
 
 ---
 
+## v2 (1 Oct 2026, evening): the survey becomes its own site
+
+Requested after the first launch. **Where this section and the rest of the file disagree, this section wins.** The server module, the fingerprint secret, the timeline, the grace period, finalize, hide, the builder, the templates and the exports below are unchanged.
+
+| Topic | v2 |
+|---|---|
+| Routes | **`/survey`** (also `/surveys`) is where anyone answers, and **`/surveyAdmin`** is the hosts' survey studio. Both live in the same Worker and Durable Object, served by `src/survey/SurveySite.tsx` (lazy-loaded), and neither shows the game. There's no presenter mode for surveys. |
+| Look | A glowing glassmorphic gradient: slow-drifting colour orbs (`.glass-orb`) behind frosted cards (`.glass`). They stay still under reduced motion. |
+| Run-bys (2 Oct) | The leaders' bobblehead caricatures appear on both `/survey` and `/surveyAdmin` every 15–30 s (`<Zoomies minGapMs={15_000} maxGapMs={30_000} pops />` in `SurveySite.tsx`). About 40 % **pop in** over a random edge (never the same edge twice in a row), wave and shoot back out; the rest dash across in any direction or zoom up close like in the game. Each run plays its sounds: a boing in, the leader's signature sound, then a swoosh and a “wheee” out. A 🔊/🔇 toggle (`src/survey/SoundToggle.tsx`, the same setting as the game's music) sits on both pages. There are no run-bys and no toggle under reduced motion, and the game keeps its own 16–60 s run-bys without pops. |
+| Respondents | **No login and no name.** `/survey` connects without a session token, even on a phone that has a game session saved (that session is left alone for the game). The live survey's intro, then the form, review, send and thank-you. Without a live survey: “No survey is open right now”. On a device that already answered: “✅ You've already shared your feedback”. |
+| Anonymity and dedupe | Always anonymous. Name fingerprints and `NAME_TAKEN` are gone: **one response per device**, via the keyed HMAC of the device id. A connection can send at most 3 responses (`RATE_LIMIT`). Clearing site data or a private window can get past it; that's the honour-system limit of “no logins”. |
+| Responses | **Shown one by one, as they arrive (k = 1).** Launches always use k = 1. At start-up, older surveys switch to k = 1 unless some responses are still sealed (those keep their promised group until closing). |
+| Studio sign-in | The same host name as the game console (name + host suffix). It sends `join` with `hostOnly: true`, and the server refuses (`NOT_ALLOWED`) any name without host access, **without creating a game player**. The studio only uses a saved host session. |
+| Studio | The survey list, templates, builder (add or edit questions, every response type and input), preview, launch (days, end of day IST; there are no anonymity or group options any more), share (link, QR, invite) and manage (extend, close, reopen, finalize, clear, delete). A launched survey has three tabs: **🃏 Responses**, **📊 Summary** (the charts, comments and exports below) and **⚙️ Manage**. |
+| 🃏 Responses | `src/admin/survey/ResponseCarousel.tsx`: one card per response on a 3-D ring. ◀ ▶ buttons, ← → keys, a swipe or a tap on a side card turns it one card at a time. The order is random, with no names and no times. New responses appear live while the card you're reading stays in front, and Hide/Unhide is on each card. |
+| The game app | **No survey UI at all**: no Survey tab, live chip or launch warning in the host console, and no lobby card, auto-open or banner on phones or the join screen. The server sends `survey` messages only to sockets that never log in. The game's **Wipe everything** now deletes the game's tables only, so **surveys and their responses are kept**. |
+| Removed files | `src/survey/SurveyApp.tsx`, `src/survey/SurveyBanner.tsx`. New: `SurveySite.tsx`, `SurveyRespond.tsx`, `SurveyStudio.tsx` and `SoundToggle.tsx` in `src/survey/`, plus `ResponseCarousel.tsx`. |
+| Superseded below | The entry points and auto-open in §0, §4.1 and §11.2–§11.4; `NAME_TAKEN` and the rename card (§5.4, §11.4); named mode and the k choice (§5.5, §12.5); the console tab and chip (§12.1); the wipe deleting surveys (§12.8). |
+| Verified | Locally: 16/16 server checks (refused studio sign-in creates no player; anonymous check and submit; same device refused; 3 per connection; game players get no survey messages; every response released at once with no name or time; a game wipe keeps surveys and responses), 7/7 game-regression checks, and browser runs of the studio (sign-in, template, edit, add, launch, share, carousel, live update, hide, summary) and of `/survey` on three phones. The same flow was run on a temporary staging Worker before going live. Run-bys: locally, pops from all four edges, gaps of 17–25 s over 100 s, muting silences the next run, nothing under reduced motion; in production, a run with sound on both pages within 30 s. |
+
+---
+
 ## 0. TL;DR
 
 | Topic | Decision |
@@ -745,7 +767,7 @@ export function parseSurveyAnswers(questions: SurveyQuestion[], raw: unknown): S
 import type { ErrorCode, Results, ServerMsg } from '../shared/protocol';
 import type { AdminSurvey, PublicSurvey, SurveyAnswers, SurveyCard, SurveyClientMsg, SurveyData, SurveyQuestion } from '../shared/survey';
 import {
-  AUTO_FINALIZE_DAYS, DAY_MS, DEFAULT_K, DEVICE_RE, K_CHOICES, SURVEY_GRACE_MS, SURVEY_LIMITS, endOfIstDay, istDay, surveyStatus,
+  AUTO_FINALIZE_DAYS, DAY_MS, DEVICE_RE, SURVEY_GRACE_MS, SURVEY_LIMITS, endOfIstDay, istDay, surveyStatus,
 } from '../shared/survey';
 import { cut } from './validate';
 import { parseSurveyAnswers, parseSurveyDraft } from './survey-validate';
@@ -753,10 +775,13 @@ import { parseSurveyAnswers, parseSurveyDraft } from './survey-validate';
 // What the survey module needs from the GameRoom. It never reads or writes game state.
 export interface SurveyHost {
   sockets(): { ws: WebSocket; kind: 'anon' | 'player' | 'admin' }[];
-  player(pid: string): { name: string; key: string; avatar: string; kicked: boolean } | null;
 }
 
-export type SurveyCaller = { kind: 'player'; pid: string } | { kind: 'admin' };
+// Respondents never log in (the /survey site), so everyone who isn't a host is just "public".
+export type SurveyCaller = { kind: 'public' } | { kind: 'admin' };
+
+// Successful sends per connection: a real person sends one; this only slows down a script on a single socket.
+const SENDS_PER_SOCKET = 3;
 
 // Stored as JSON in surveys.data. The fingerprint key lives only in surveys.salt and never leaves this file.
 type Rec = AdminSurvey;
@@ -812,6 +837,7 @@ export class Surveys {
   private cache = new Map<string, Resp[]>(); // parsed responses, loaded when a host first asks
   private timer: ReturnType<typeof setTimeout> | null = null;
   private lastPublic = ''; // the live survey as phones last saw it
+  private sends = new WeakMap<WebSocket, number>();
 
   constructor(
     private ctx: DurableObjectState,
@@ -828,6 +854,12 @@ export class Surveys {
     this.salts.clear();
     for (const r of this.sql.exec<SurveyRow>('SELECT data, salt FROM surveys')) {
       const s = JSON.parse(r.data) as Rec;
+      // Responses are shown one by one now (no groups). Older surveys switch over unless some responses are still
+      // sealed: those were promised a group, so they keep it until they're revealed at closing.
+      if (s.k > 1 && s.pending === 0) {
+        s.k = 1;
+        this.sql.exec('UPDATE surveys SET data = ? WHERE id = ?', JSON.stringify(s), s.id);
+      }
       this.list.push(s);
       if (r.salt) this.salts.set(s.id, r.salt);
     }
@@ -849,20 +881,13 @@ export class Surveys {
     this.send(ws, this.listMsg());
   }
 
-  // After a wipe: everyone learns there is no survey any more.
-  announce() {
-    this.changed(true);
-  }
-
   // ---------- messages ----------
 
   async onMessage(ws: WebSocket, caller: SurveyCaller, msg: SurveyClientMsg) {
     this.sweep(); // auto-finalize happens on the first activity after it is due
-    if (caller.kind === 'player') {
-      const p = this.host.player(caller.pid);
-      if (!p || p.kicked) return;
+    if (caller.kind === 'public') {
       if (msg.t === 'survey:check') return this.check(ws, msg.sid, msg.device);
-      if (msg.t === 'survey:submit') return this.submit(ws, caller.pid, msg);
+      if (msg.t === 'survey:submit') return this.submit(ws, msg);
       return this.fail(ws, 'NOT_ALLOWED', 'Not allowed');
     }
     switch (msg.t) {
@@ -911,7 +936,8 @@ export class Surveys {
     this.send(ws, { t: 'survey:me', sid: s.id, done: fp !== null && this.hasBallot(s.id, fp.hs[0]), n: s.n });
   }
 
-  private async submit(ws: WebSocket, pid: string, msg: Extract<SurveyClientMsg, { t: 'survey:submit' }>) {
+  // No logins: one response per device, recognised by a keyed fingerprint of the device id.
+  private async submit(ws: WebSocket, msg: Extract<SurveyClientMsg, { t: 'survey:submit' }>) {
     const { ref, device } = msg;
     if (typeof ref !== 'string' || !ref || ref.length > 40) return;
     const ack = (ok: boolean, code?: ErrorCode) => this.send(ws, { t: 'survey:ack', ref, ok, code });
@@ -920,48 +946,37 @@ export class Surveys {
     if (!s || !this.accepting(s, Date.now())) return ack(false, 'CLOSED');
     const answers = parseSurveyAnswers(s.questions, msg.answers);
     if (!answers) return ack(false, 'BAD_REQUEST');
-    const who = this.host.player(pid);
-    if (!who) return;
-    const me = { key: who.key, name: who.name, avatar: who.avatar }; // one snapshot for the ballot and the named response
+    if ((this.sends.get(ws) ?? 0) >= SENDS_PER_SOCKET) return ack(false, 'RATE_LIMIT');
 
     // Fingerprinting awaits crypto, and other messages can run meanwhile (input gates only cover storage). If a reset
     // swapped the secret during the await, fingerprint again with the new one, so dedupe never uses a stale key.
     let fp: { salt: string; hs: string[] } | null = null;
     for (let i = 0; i < 3 && (fp === null || this.salts.get(s.id) !== fp.salt); i++) {
-      fp = await this.fingerprints(s, [`d:${device}`, `n:${me.key}`]);
+      fp = await this.fingerprints(s, [`d:${device}`]);
       if (!fp) break;
     }
 
     // Synchronous from here on: no other message can run between the checks and the insert.
     const now = Date.now();
     if (!fp || this.salts.get(s.id) !== fp.salt || this.byId(s.id) !== s || !this.accepting(s, now)) return ack(false, 'CLOSED');
-    const p = this.host.player(pid);
-    if (!p || p.kicked || p.key !== me.key) return ack(false, 'BAD_REQUEST'); // left, removed or renamed meanwhile: send again
-    const [hd, hn] = fp.hs;
+    const [hd] = fp.hs;
     if (this.hasBallot(s.id, hd)) return ack(false, 'ALREADY_ANSWERED'); // this device (also a retry whose ack got lost)
-    if (this.hasBallot(s.id, hn)) return ack(false, 'NAME_TAKEN'); // someone with this name, on another device
     if (s.n >= SURVEY_LIMITS.responses) return ack(false, 'LIMIT');
     const sealed = s.anonymous && s.k > 1;
-    const r: Resp = {
-      id: randomId(),
-      released: !sealed,
-      at: s.anonymous ? null : now,
-      who: s.anonymous ? null : { name: me.name, avatar: me.avatar },
-      answers,
-      hidden: false,
-    };
+    const r: Resp = { id: randomId(), released: !sealed, at: s.anonymous ? null : now, who: null, answers, hidden: false };
     this.ctx.storage.transactionSync(() => {
-      this.sql.exec('INSERT INTO survey_ballots (sid, h) VALUES (?, ?), (?, ?)', s.id, hd, s.id, hn);
+      this.sql.exec('INSERT INTO survey_ballots (sid, h) VALUES (?, ?)', s.id, hd);
       this.sql.exec(
-        'INSERT INTO survey_responses (sid, id, released, at, who, answers) VALUES (?, ?, ?, ?, ?, ?)',
-        s.id, r.id, r.released ? 1 : 0, r.at, r.who ? JSON.stringify(r.who) : null, JSON.stringify(answers),
+        'INSERT INTO survey_responses (sid, id, released, at, who, answers) VALUES (?, ?, ?, ?, NULL, ?)',
+        s.id, r.id, r.released ? 1 : 0, r.at, JSON.stringify(answers),
       );
       this.sql.exec('INSERT INTO survey_days (sid, day, n) VALUES (?, ?, 1) ON CONFLICT (sid, day) DO UPDATE SET n = n + 1', s.id, istDay(now));
     });
+    this.sends.set(ws, (this.sends.get(ws) ?? 0) + 1);
     this.cache.get(s.id)?.push(r);
     s.n++;
     if (sealed) s.pending++;
-    // Keep at least k sealed while live, so every reveal (the last one at closing too) holds k or more responses.
+    // Older grouped surveys only: keep at least k sealed while live, so every reveal holds k or more responses.
     if (sealed && s.pending >= 2 * s.k) this.reveal(s, s.k);
     this.bump(s);
     ack(true);
@@ -1060,7 +1075,7 @@ export class Surveys {
     if (!s) {
       if (this.list.length >= SURVEY_LIMITS.surveys) return this.fail(ws, 'LIMIT', `Up to ${SURVEY_LIMITS.surveys} surveys — delete an old one first`);
       const rec: Rec = {
-        ...d, id: randomId(), createdAt: Date.now(), anonymous: true, k: DEFAULT_K, days: 3, endOfDay: true,
+        ...d, id: randomId(), createdAt: Date.now(), anonymous: true, k: 1, days: 3, endOfDay: true,
         opensAt: null, closesAt: null, finalized: false, rev: 0, n: 0, pending: 0,
       };
       this.list.push(rec);
@@ -1083,12 +1098,12 @@ export class Surveys {
     const days = msg.days;
     if (!Number.isInteger(days) || days < 1 || days > SURVEY_LIMITS.days) return this.fail(ws, 'BAD_REQUEST', `Pick 1–${SURVEY_LIMITS.days} days`);
     const now = Date.now();
-    const anonymous = msg.anonymous !== false;
     const endOfDay = msg.endOfDay !== false;
     const closesAt = endOfDay ? endOfIstDay(now + days * DAY_MS) : now + days * DAY_MS;
+    // Always anonymous (nobody logs in to answer) and shown one by one, as each response arrives.
     const patch: Partial<Rec> = {
-      anonymous,
-      k: anonymous ? (K_CHOICES.includes(msg.k) ? msg.k : DEFAULT_K) : 1,
+      anonymous: true,
+      k: 1,
       days: Math.ceil((closesAt - now) / DAY_MS),
       endOfDay,
       opensAt: now,
@@ -1148,7 +1163,7 @@ export class Surveys {
     if (this.list.length >= SURVEY_LIMITS.surveys) return this.fail(ws, 'LIMIT', `Up to ${SURVEY_LIMITS.surveys} surveys — delete an old one first`);
     const copy: Rec = {
       id: randomId(), title: cut(`${s.title} (copy)`, SURVEY_LIMITS.title), intro: s.intro, thanks: s.thanks,
-      questions: structuredClone(s.questions), createdAt: Date.now(), anonymous: s.anonymous, k: s.k, days: s.days,
+      questions: structuredClone(s.questions), createdAt: Date.now(), anonymous: true, k: 1, days: s.days,
       endOfDay: s.endOfDay, opensAt: null, closesAt: null, finalized: false, rev: 0, n: 0, pending: 0,
     };
     this.list.push(copy);
@@ -1258,8 +1273,9 @@ export class Surveys {
     this.sql.exec('UPDATE surveys SET data = ? WHERE id = ?', JSON.stringify(s), s.id);
   }
 
-  // Hosts get the (small) list and refetch results whose rev moved. Phones only hear about the live survey, and only
-  // when what they'd see changed (or when forced, so they re-check "already responded" after a reset).
+  // Hosts get the (small) list and refetch results whose rev moved. The survey site (sockets that never log in) only
+  // hears about the live survey, and only when what it would see changed (or when forced, so "already responded" is
+  // re-checked after a reset). Game players and hosts don't need it.
   private changed(forcePlayers = false) {
     this.toPlayers(forcePlayers);
     this.toAdminsSoon();
@@ -1271,7 +1287,7 @@ export class Surveys {
     if (!force && key === this.lastPublic) return;
     this.lastPublic = key;
     const m = JSON.stringify({ t: 'survey', now: Date.now(), survey } satisfies ServerMsg);
-    for (const c of this.host.sockets()) if (c.kind !== 'admin') this.raw(c.ws, m);
+    for (const c of this.host.sockets()) if (c.kind === 'anon') this.raw(c.ws, m);
   }
 
   private toAdminsSoon() {
@@ -2380,7 +2396,7 @@ Changes from the spec, made while building (§10.4 and §11–§12 above already
 9. **Re-validate after every `await` in the Durable Object** (S13). Crypto awaits let other messages run, so check the secret, the survey and the player again before writing. The first version of this plan missed exactly that (§18.1).
 10. `useGame` selectors must return existing references: no `.filter()` or `.map()` inside selectors ([PLAN.md](./PLAN.md) §22.4). Read `surveyMe` as a whole and index it by survey id outside the selector.
 11. Survey text inputs need ≥ 16 px fonts on iOS.
-12. `Zoomies` (the running-animals easter egg) also runs over the survey screens. The animals ignore taps (`pointer-events: none`) and are gone within a few seconds, so they're left as is; pause them while `SurveyApp` is open if they turn out to be distracting.
+12. `Zoomies` (the run-by easter egg: animals at first, the managers' bobblehead caricatures since 1 Oct) also runs over the survey screens. The runners ignore taps (`pointer-events: none`) and are gone within a few seconds, so they're left as is; pause them while `SurveyApp` is open if they turn out to be distracting.
 13. Never call `client.leave()` from survey flows: logging out deletes the player's game profile and points. Name clashes use `rename` (§11.4).
 
 ---

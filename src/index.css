@@ -63,18 +63,18 @@ input, textarea, select { font-size: 16px; } /* iOS zooms into smaller inputs */
 @keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
 /* ---------- photo reel (PhotoReel.tsx): party photos revolving round the splash text ---------- */
-/* The stage stops above the band (on phones also above the splash's Enter button) and clips: photos never reach the animals.
+/* The stage stops above the band (on phones also above the splash's Enter button) and clips: photos never reach the band.
    PhotoReel.tsx sets --reel-fs (text size cap) and --ih (photo height) in px, and each card's transform, opacity and z-index. */
 .reel {
   position: absolute;
   inset-inline: 0;
   top: max(0.5rem, env(safe-area-inset-top));
-  bottom: calc(var(--band-w) * 0.3125 + max(0.75rem, env(safe-area-inset-bottom)) + 6rem);
+  bottom: calc(var(--band-w) * 0.27 + max(0.75rem, env(safe-area-inset-bottom)) + 6rem);
   overflow: hidden;
   isolation: isolate;
   pointer-events: none;
 }
-.reel-big { bottom: calc(var(--band-w) * 0.3125 + 1.5rem); }
+.reel-big { bottom: calc(var(--band-w) * 0.27 + 1.5rem); }
 .reel-text {
   position: absolute;
   left: 0;
@@ -254,13 +254,13 @@ input, textarea, select { font-size: 16px; } /* iOS zooms into smaller inputs */
 @keyframes mw-ink { 0%, 40%, 100% { color: #fff; } 10% { color: #ff9933; } 22% { color: #ff5fa2; } }
 @keyframes mw-beat { 0%, 60%, 100% { scale: 1; } 15% { scale: 1.4; } 30% { scale: 1.1; } 45% { scale: 1.3; } }
 
-/* ---------- animals (Critter.tsx): the splash band and the zoomies ---------- */
-/* Parts animate the individual translate/rotate/scale properties so several loops can move one part at once. */
+/* ---------- bobblehead caricatures (Caricature.tsx): the splash band and the zoomies ---------- */
+/* Parts animate the individual translate/rotate/scale properties so several loops can move one part at once.
+   The heads are real photos, so they only ever move or tilt (or scale evenly in the zoomies), never squash. */
 .band svg, .zoomie svg { display: block; width: 100%; overflow: visible; }
 .cr-all { transform-origin: 60px 146px; }
-.cr-blink { animation: cr-blink 4.3s infinite; }
 
-:root { --band-w: min(92vw, 40rem, 90vh); } /* PhotoReel's stage also uses it to stay above the band */
+:root { --band-w: min(96vw, 44rem, 90vh); } /* PhotoReel's stage also uses it to stay above the band */
 .band {
   --beat: calc(60s / 124); /* the party music's tempo (music.ts) */
   position: absolute;
@@ -269,10 +269,12 @@ input, textarea, select { font-size: 16px; } /* iOS zooms into smaller inputs */
   translate: -50% 0;
   width: var(--band-w);
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   isolation: isolate;
   pointer-events: none;
+  transition: opacity 0.4s;
 }
+.band-wait { opacity: 0; } /* until every head photo has loaded */
 .band-big, .reel-big { --band-w: min(46vw, 80vh); }
 .band::before { /* stage glow */
   content: "";
@@ -282,28 +284,35 @@ input, textarea, select { font-size: 16px; } /* iOS zooms into smaller inputs */
   background: radial-gradient(50% 70% at 50% 100%, rgb(255 153 51 / 0.4), transparent);
 }
 .band > div { position: relative; }
-/* The splash's Enter button stands just above the band (4 musicians, each 120 × 150). */
-.above-band { bottom: calc(var(--band-w) * 0.3125 + max(0.75rem, env(safe-area-inset-bottom))); }
+/* The splash's Enter button stands just above the band (6 musicians, each 120 × 150, plus the wizard's hat). */
+.above-band { bottom: calc(var(--band-w) * 0.27 + max(0.75rem, env(safe-area-inset-bottom))); }
 
 .band .cr-all { animation: cr-bounce var(--beat) ease-in-out infinite; }
+.band .cr-head { animation: cr-bobble calc(var(--beat) * 2) ease-in-out infinite; } /* the bobblehead wobble */
 .band .cr-leg-l { animation: cr-tap calc(var(--beat) * 2) ease-in-out infinite; }
 .band .cr-leg-r { animation: cr-tap calc(var(--beat) * 2) ease-in-out calc(var(--beat) * -1) infinite; }
-.band-kitten .cr-all { animation: cr-bounce var(--beat) ease-in-out infinite, cr-sway calc(var(--beat) * 4) ease-in-out infinite; }
-.band-kitten .cr-head { animation: cr-sway calc(var(--beat) * 2) ease-in-out infinite; }
-.band-kitten .cr-tail { --wag: 8deg; animation: cr-wag calc(var(--beat) * 2) ease-in-out infinite alternate; }
+.band-rockstar .cr-all { animation: cr-bounce var(--beat) ease-in-out infinite, cr-sway calc(var(--beat) * 4) ease-in-out infinite; }
+.band-rockstar .cr-head { animation: cr-headbang var(--beat) ease-in-out infinite; }
 .band-strum { animation: band-strum var(--beat) ease-in-out infinite; }
-.band-puppy .cr-ear-l { --flop: 12deg; animation: cr-flop var(--beat) ease-in-out infinite; }
-.band-puppy .cr-ear-r { --flop: -12deg; animation: cr-flop var(--beat) ease-in-out infinite; }
-.band-puppy .cr-tail { animation: cr-wag calc(var(--beat) / 2) ease-in-out infinite alternate; }
+.band-chef .cr-hat { --sway: 7deg; animation: cr-sway var(--beat) ease-in-out infinite; }
 .band-stick-l { --lift: 26deg; animation: band-strike var(--beat) infinite; }
 .band-stick-r { --lift: -26deg; animation: band-strike calc(var(--beat) / 2) calc(var(--beat) / -4) infinite; }
-.band-capybara .cr-all { --hop: -3px; animation: cr-bounce var(--beat) ease-in-out infinite, cr-sway calc(var(--beat) * 8) ease-in-out infinite; }
-.band-capybara .cr-head { animation: cr-nod var(--beat) ease-in-out infinite; }
-.band-capybara .cr-fruit { --sway: 12deg; animation: cr-sway calc(var(--beat) * 2) ease-in-out infinite; }
+.band-wizard .cr-all { --hop: -4px; animation: cr-bounce var(--beat) ease-in-out infinite, cr-sway calc(var(--beat) * 8) ease-in-out infinite; }
+.band-wizard .cr-hat { --sway: 9deg; animation: cr-sway calc(var(--beat) * 2) ease-in-out infinite; }
+.band-conduct { animation: band-conduct var(--beat) ease-in-out infinite; }
+.band-wave { animation: band-wave calc(var(--beat) * 2) ease-in-out infinite alternate; }
+.band-hero .cr-cape { animation: cr-flap calc(var(--beat) * 2) ease-in-out infinite alternate; }
 .band-key-l { animation: band-press calc(var(--beat) * 2) ease-out infinite; }
 .band-key-r { animation: band-press calc(var(--beat) * 2) ease-out calc(var(--beat) * -1) infinite; }
-.band-squirrel .cr-all { --hop: -11px; }
-.band-squirrel .cr-tail { --wag: 5deg; animation: cr-wag calc(var(--beat) * 2) ease-in-out infinite alternate; }
+.band-viking .cr-all { --hop: -11px; }
+.band-viking .cr-head { --bob: 7deg; animation: cr-bobble var(--beat) ease-in-out infinite; }
+.band-viking .cr-cape { animation: cr-flap var(--beat) ease-in-out infinite alternate; }
+.band-captain .cr-all { --hop: -5px; animation: cr-bounce var(--beat) ease-in-out infinite, cr-sway calc(var(--beat) * 4) ease-in-out infinite; }
+.band-captain .cr-hat { --sway: 5deg; animation: cr-sway calc(var(--beat) * 2) ease-in-out infinite; }
+.band-squeeze-l { --sq: 4px; animation: band-squeeze calc(var(--beat) * 2) ease-in-out infinite alternate; }
+.band-squeeze-r { --sq: -4px; animation: band-squeeze calc(var(--beat) * 2) ease-in-out infinite alternate; }
+.band-bellows { animation: band-bellows calc(var(--beat) * 2) ease-in-out infinite alternate; }
+.band .cr-parrot, .cr-run .cr-parrot { animation: cr-peck 0.45s ease-in-out infinite alternate; }
 .band-shake-l { animation: band-shake calc(var(--beat) / 2) ease-in-out infinite alternate; }
 .band-shake-r { animation: band-shake calc(var(--beat) / 2) ease-in-out calc(var(--beat) / -2) infinite alternate; }
 .band-note {
@@ -333,35 +342,106 @@ input, textarea, select { font-size: 16px; } /* iOS zooms into smaller inputs */
 }
 .zoomie-dash { --stride: 0.2s; }
 .zoomie-zoom { --stride: 0.5s; } /* one footfall per 250 ms hop */
+.zoomie-pop { --stride: 0.6s; } /* an unhurried wave hello */
 .cr-fast { --stride: 0.18s; }
 .cr-run .cr-all { animation: cr-bob calc(var(--stride) / 2) ease-in-out infinite alternate; }
 .cr-run .cr-leg-l { animation: cr-step var(--stride) linear infinite; }
 .cr-run .cr-leg-r { animation: cr-step var(--stride) linear calc(var(--stride) / -2) infinite; }
 .cr-run .cr-arm-l { --pump: 24deg; animation: cr-pump var(--stride) ease-in-out infinite; }
 .cr-run .cr-arm-r { --pump: -24deg; animation: cr-pump var(--stride) ease-in-out infinite; }
-.cr-run .cr-ear-l { --flop: 14deg; animation: cr-flop calc(var(--stride) / 2) ease-in-out infinite; }
-.cr-run .cr-ear-r { --flop: -14deg; animation: cr-flop calc(var(--stride) / 2) ease-in-out infinite; }
-.cr-run .cr-tail { animation: cr-wag calc(var(--stride) / 2) ease-in-out infinite alternate; }
-.cr-run.cr-squirrel .cr-tail { --wag: 7deg; } /* that tail is half the squirrel */
+.cr-run .cr-head { --bob: 6deg; animation: cr-bobble var(--stride) ease-in-out infinite; }
+.cr-run .cr-hat { --sway: 8deg; animation: cr-sway var(--stride) ease-in-out infinite; }
+.cr-run .cr-cape { animation: cr-flap calc(var(--stride) / 2) ease-in-out infinite alternate; }
 .cr-whee .cr-arm-l { --up: 110deg; animation: cr-wave calc(var(--stride) / 2) ease-in-out infinite alternate; }
 .cr-whee .cr-arm-r { --up: -110deg; animation: cr-wave calc(var(--stride) / 2) ease-in-out infinite alternate; }
 
-@keyframes cr-blink { 0%, 94%, 100% { scale: 1 1; } 97% { scale: 1 0.1; } }
 @keyframes cr-bounce {
-  0%, 100% { translate: 0 0; scale: 1.05 0.95; }
-  35% { translate: 0 var(--hop, -7px); scale: 0.97 1.03; }
-  70% { translate: 0 0; scale: 1 1; }
+  0%, 100% { translate: 0 0; }
+  35% { translate: 0 var(--hop, -7px); }
+  70% { translate: 0 0; }
+}
+@keyframes cr-bobble { 0%, 100% { rotate: calc(var(--bob, 5deg) * -1); } 50% { rotate: var(--bob, 5deg); } }
+@keyframes cr-headbang { /* nods hard on the beat */
+  0%, 100% { rotate: 0deg; translate: 0 0; }
+  30% { rotate: 8deg; translate: 0 2.5px; }
+  60% { rotate: -2deg; translate: 0 0; }
 }
 @keyframes cr-sway { 0%, 100% { rotate: calc(var(--sway, 4deg) * -1); } 50% { rotate: var(--sway, 4deg); } }
 @keyframes cr-tap { 0%, 30%, 100% { translate: 0 0; } 12% { translate: 0 -4px; } }
-@keyframes cr-wag { from { rotate: calc(var(--wag, 20deg) * -1); } to { rotate: var(--wag, 20deg); } }
-@keyframes cr-flop { 0%, 100% { rotate: 0deg; } 35% { rotate: var(--flop); } }
-@keyframes cr-nod { 0%, 100% { translate: 0 2px; } 50% { translate: 0 -1px; } }
+@keyframes cr-flap { from { transform: skewX(-7deg); } to { transform: skewX(7deg); } }
 @keyframes cr-bob { from { translate: 0 0; } to { translate: 0 -5px; } }
 @keyframes cr-step { 0%, 50%, 100% { translate: 0 0; } 25% { translate: 0 -10px; } }
 @keyframes cr-pump { 0%, 100% { rotate: var(--pump); } 50% { rotate: calc(var(--pump) * -1); } }
 @keyframes cr-wave { from { rotate: calc(var(--up) * 0.8); } to { rotate: calc(var(--up) * 1.15); } }
 @keyframes band-strum { 0%, 100% { rotate: -10deg; } 25% { rotate: 10deg; } 50% { rotate: -6deg; } 75% { rotate: 8deg; } }
+@keyframes band-conduct { 0%, 100% { rotate: -14deg; } 50% { rotate: 12deg; } }
+@keyframes band-wave { from { rotate: -8deg; } to { rotate: 10deg; } }
+@keyframes band-squeeze { from { translate: 0 0; } to { translate: var(--sq) 0; } }
+@keyframes band-bellows { from { scale: 1 1; } to { scale: 0.8 1; } }
+@keyframes cr-peck { from { rotate: -8deg; } to { rotate: 6deg; } }
+
+/* ---------- the survey site (SurveySite.tsx): glowing glass ---------- */
+.survey-site { position: relative; min-height: 100dvh; overflow-x: hidden; color: #fff; background: linear-gradient(160deg, #0c0a24 0%, #1b1150 45%, #0a1d3e 100%); }
+.glass-bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.glass-orb { /* soft by itself (a radial gradient), so no costly blur filter */
+  position: absolute;
+  width: 52vmax;
+  height: 52vmax;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 50% 50%, var(--c) 0%, color-mix(in srgb, var(--c) 35%, transparent) 38%, transparent 68%);
+  opacity: 0.6;
+  mix-blend-mode: screen;
+  animation: orb-drift var(--d, 24s) ease-in-out infinite alternate;
+}
+@keyframes orb-drift { from { translate: 0 0; scale: 1; } to { translate: var(--x, 10vmax) var(--y, 8vmax); scale: 1.18; } }
+.glass {
+  border-radius: 1.75rem;
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.15), rgb(255 255 255 / 0.05));
+  border: 1px solid rgb(255 255 255 / 0.22);
+  box-shadow: 0 18px 50px rgb(0 0 0 / 0.35), inset 0 1px 0 rgb(255 255 255 / 0.25), 0 0 70px rgb(255 60 172 / 0.14);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  backdrop-filter: blur(22px) saturate(160%);
+}
+
+/* Individual responses (ResponseCarousel.tsx): cards on a ring that turns in 3-D. No backdrop blur inside 3-D. */
+.carousel-stage { position: relative; height: min(32rem, 66vh); perspective: 1400px; transform-style: preserve-3d; touch-action: pan-y; user-select: none; }
+.carousel-card {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: min(27rem, 84%);
+  margin-left: calc(min(27rem, 84%) / -2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  border-radius: 1.75rem;
+  background: linear-gradient(160deg, rgb(86 56 168), rgb(30 20 74));
+  border: 1px solid rgb(255 255 255 / 0.24);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.45), inset 0 1px 0 rgb(255 255 255 / 0.2);
+  transition: transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.7s;
+  backface-visibility: hidden;
+  cursor: pointer;
+}
+.carousel-front { cursor: auto; box-shadow: 0 24px 60px rgb(0 0 0 / 0.45), 0 0 55px rgb(255 153 51 / 0.38), inset 0 1px 0 rgb(255 255 255 / 0.28); }
+.carousel-card ol { scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / 0.3) transparent; }
+.carousel-hidden { filter: grayscale(0.7); }
+.carousel-arrow {
+  display: grid;
+  place-items: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 9999px;
+  font-size: 1.2rem;
+  background: rgb(255 255 255 / 0.12);
+  border: 1px solid rgb(255 255 255 / 0.28);
+  box-shadow: 0 0 26px rgb(255 153 51 / 0.3);
+  transition: transform 0.2s, background-color 0.2s;
+}
+.carousel-arrow:hover:not(:disabled) { background: rgb(255 153 51 / 0.35); transform: scale(1.08); }
+.carousel-arrow:active:not(:disabled) { transform: scale(0.92) rotate(-10deg); }
+.carousel-arrow:disabled { opacity: 0.35; }
 @keyframes band-strike { /* the stick lands on the beat */
   0% { rotate: 0deg; animation-timing-function: ease-out; }
   45% { rotate: var(--lift); animation-timing-function: ease-in; }
@@ -382,4 +462,6 @@ input, textarea, select { font-size: 16px; } /* iOS zooms into smaller inputs */
   .spirit-bubble, .spirit-in, .spirit-swap, .spirit-lens { animation: none; }
   .madewith[data-hover] .mw-ch, .madewith[data-hover] .mw-beat { animation: none; }
   .band * { animation: none !important; } /* a still band; Zoomies.tsx skips the run-bys entirely */
+  .glass-orb { animation: none; }
+  .carousel-card { transition: none; }
 }
