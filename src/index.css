@@ -341,7 +341,7 @@ input, textarea, select { font-size: 16px; } /* iOS zooms into smaller inputs */
   mask: linear-gradient(to bottom, transparent 6%, #000 30%, transparent 34%);
 }
 .zoomie-dash { --stride: 0.2s; }
-.zoomie-zoom { --stride: 0.5s; } /* one footfall per 250 ms hop */
+.zoomie-zoom { --stride: 0.64s; } /* one footfall per 320 ms hop (STEP_MS in Zoomies.tsx) */
 .zoomie-pop { --stride: 0.6s; } /* an unhurried wave hello */
 .cr-fast { --stride: 0.18s; }
 .cr-run .cr-all { animation: cr-bob calc(var(--stride) / 2) ease-in-out infinite alternate; }

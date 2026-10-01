@@ -9,8 +9,9 @@ import type { Person } from './Caricature';
 
 type Pt = { x: number; y: number }; // screen px
 type Base = { id: number; who: Person; width: number; delay: number; pitch: number; rank: number };
-// Dash: a straight run across the screen between two off-screen points, leaning into it.
-type Dash = Base & { style: 'dash'; from: Pt; to: Pt; lean: number };
+// Dash: a straight run across the screen between two off-screen points, leaning into it. It's slowest at `mid` (0–1
+// along the run), where it passes its spot in the middle of the screen.
+type Dash = Base & { style: 'dash'; from: Pt; to: Pt; lean: number; mid: number };
 // Zoom: appears on the horizon at x `far`, hops up to x `near`, runs off to x `away`.
 type Zoom = Base & { style: 'zoom'; far: number; near: number; away: number };
 // Pop: springs in over one edge of the screen at `along` px (feet towards the edge: from the top it hangs upside down),
@@ -19,11 +20,16 @@ type Edge = 'bottom' | 'left' | 'top' | 'right';
 type Pop = Base & { style: 'pop'; edge: Edge; along: number };
 type Run = Dash | Zoom | Pop;
 
-const DASH_MS = 1400;
+// Entrances are unhurried so everyone can see whose face it is; exits stay as quick as ever.
+// The dash: in at full speed, easing off to a jog as it crosses the middle of the screen, then speeding up again on the
+// way out, which takes as long as it does at full speed.
+const DASH_MS = 1400; // the whole run at full speed
+const JOG = 0.45; // the speed in the middle, as a share of full speed
+const SWAY_MS = 350; // leaning one way, then the other
 // The 3-D run: hops closer step by step, stops to say hello, turns round and scampers off.
 const STEPS = 7;
-const STEP_MS = 250;
-const PEEK_MS = 560;
+const STEP_MS = 320;
+const PEEK_MS = 950;
 const TURN_MS = 160;
 const AWAY_MS = 520;
 const TURNED_MS = STEPS * STEP_MS + PEEK_MS + TURN_MS;
@@ -32,8 +38,8 @@ const FAR = 0.08;
 const NEAR = 1.3;
 const scaleAt = (step: number) => FAR * (NEAR / FAR) ** (step / STEPS);
 // The pop: springs in, waves for a moment, shoots back out.
-const POP_IN = 420;
-const POP_STAY = 1500;
+const POP_IN = 750;
+const POP_STAY = 1800;
 const POP_OUT = 380;
 const POP_MS = POP_IN + POP_STAY + POP_OUT;
 const EDGES: readonly Edge[] = ['bottom', 'left', 'top', 'right'];
@@ -41,6 +47,21 @@ const TILT: Record<Edge, number> = { bottom: 0, left: 90, top: 180, right: -90 }
 const CHORD = [1, 1.26, 1.5]; // one "wheee" per runner, in harmony
 const lerp = (a: number, b: number, p: number) => a + (b - a) * p;
 const panOf = (x: number) => Math.min(1, Math.max(-1, (x / innerWidth) * 2 - 1));
+
+// A dash slows down evenly to the jog at `mid`, then speeds up evenly.
+const dashInMs = (r: Dash) => (2 * r.mid * DASH_MS) / (1 + JOG);
+const dashMs = (r: Dash) => dashInMs(r) + (1 - r.mid) * DASH_MS;
+const runMs = (r: Run) => (r.style === 'dash' ? dashMs(r) : r.style === 'zoom' ? ZOOM_MS : POP_MS);
+
+// How far along its run (0–1) a dash is after `ms`.
+function dashAt(r: Dash, ms: number): number {
+  const v = 1 / DASH_MS; // full speed, in runs per ms
+  const inMs = dashInMs(r);
+  if (ms <= inMs) return v * ms - ((1 - JOG) * v * ms * ms) / (2 * inMs);
+  const outMs = (1 - r.mid) * DASH_MS;
+  const u = Math.min(ms - inMs, outMs);
+  return r.mid + JOG * v * u + ((1 - JOG) * v * u * u) / outMs;
+}
 
 // How far a point can travel along (dx, dy) before it is `margin` px beyond the edge of the screen.
 function reach(p: Pt, dx: number, dy: number, margin: number) {
@@ -98,10 +119,19 @@ function zoom(el: HTMLElement, run: Zoom): Animation[] {
 function dash(el: HTMLElement, run: Dash): Animation[] {
   const w = el.offsetWidth;
   const h = el.offsetHeight;
-  const frames = [0, 0.25, 0.5, 0.75, 1].map((p, i) => ({
-    transform: `translate(${lerp(run.from.x, run.to.x, p) - w / 2}px, ${lerp(run.from.y, run.to.y, p) - h / 2}px) rotate(${run.lean + (i % 2 ? 6 : -6)}deg)`,
-  }));
-  return [el.animate(frames, { duration: DASH_MS, delay: run.delay, fill: 'both' })];
+  const total = dashMs(run);
+  const at = (ms: number): Keyframe => {
+    const p = dashAt(run, ms);
+    const sway = 1 - Math.abs(((ms / SWAY_MS) % 2) - 1); // 0 → 1 → 0 over two SWAY_MS: one lean each way
+    return {
+      offset: ms / total,
+      transform: `translate(${lerp(run.from.x, run.to.x, p) - w / 2}px, ${lerp(run.from.y, run.to.y, p) - h / 2}px) rotate(${run.lean - 6 + 12 * sway}deg)`,
+    };
+  };
+  const frames: Keyframe[] = [];
+  for (let ms = 0; ms < total; ms += SWAY_MS / 4) frames.push(at(ms));
+  frames.push(at(total));
+  return [el.animate(frames, { duration: total, delay: run.delay, fill: 'both' })];
 }
 
 // Head and shoulders spring in over the edge with an overshoot, look around, then wind up and shoot back out.
@@ -123,7 +153,8 @@ function pop(el: HTMLElement, run: Pop): Animation[] {
   return [
     el.animate(
       [
-        { offset: 0, transform: at(hidden), easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)' },
+        // A soft spring: rises steadily (so the face can be seen coming in), overshoots a little and settles.
+        { offset: 0, transform: at(hidden), easing: 'cubic-bezier(0.35, 1, 0.4, 1.2)' },
         { offset: t(POP_IN), transform: at(shown), easing: 'ease-in-out' },
         { offset: t(POP_IN + POP_STAY * 0.3), transform: at(shown + 0.03, -9), easing: 'ease-in-out' },
         { offset: t(POP_IN + POP_STAY * 0.65), transform: at(shown - 0.02, 8), easing: 'ease-in-out' },
@@ -171,8 +202,9 @@ function sound(a: Sfx, group: Run[]) {
   for (const r of group) {
     const t0 = now + r.delay / 1000;
     if (r.style === 'dash') {
-      const dur = DASH_MS / 1000;
-      const t = track(a, [0, 0.25, 0.5, 0.75, 1].map((p) => [t0 + p * dur, panOf(lerp(r.from.x, r.to.x, p))]));
+      const ms = dashMs(r);
+      const dur = ms / 1000;
+      const t = track(a, [0, 0.25, 0.5, 0.75, 1].map((f) => [t0 + f * dur, panOf(lerp(r.from.x, r.to.x, dashAt(r, f * ms)))]));
       for (let s = 0.05; s < dur; s += 0.1) step(t, t0 + s, 0.1 + 0.25 * Math.sin((Math.PI * s) / dur)); // each footfall of the 0.2 s stride
       voice(t, r.who, t0 + 0.05);
       end = Math.max(end, whee(t, t0 + 0.4, dur - 0.3, 560 * r.pitch, 1180 * r.pitch, 620 * r.pitch));
@@ -261,6 +293,7 @@ export default function Zoomies({ minGapMs = 16_000, maxGapMs = 60_000, pops = f
             from: { x: p.x - dx * back, y: p.y - dy * back },
             to: { x: p.x + dx * ahead, y: p.y + dy * ahead },
             lean: dx * 14,
+            mid: Math.min(0.8, Math.max(0.2, back / (back + ahead))),
           };
         });
       } else {
@@ -282,7 +315,7 @@ export default function Zoomies({ minGapMs = 16_000, maxGapMs = 60_000, pops = f
       }
       setRuns((r) => [...r, ...group]);
       if (audio) sound(audio, group);
-      later(Math.max(...group.map((r) => r.delay + (r.style === 'dash' ? DASH_MS : r.style === 'zoom' ? ZOOM_MS : POP_MS))));
+      later(Math.max(...group.map((r) => r.delay + runMs(r))));
     };
     later();
 
