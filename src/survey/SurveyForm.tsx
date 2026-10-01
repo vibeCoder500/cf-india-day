@@ -90,7 +90,8 @@ export default function SurveyForm({ survey, preview = false, sending = false, c
     return (
       <div className="flex flex-col items-center gap-4 pt-6 text-center">
         <p className="animate-boing text-7xl">🎉</p>
-        <p className="font-display text-2xl leading-tight font-extrabold">{survey.thanks || 'Thank you! 💛'}</p>
+        <p className="font-display text-2xl leading-tight font-extrabold">{survey.thanks || 'All done! 🙌'}</p>
+        <p className="text-lg opacity-85">Thank you for sharing your feedback 💛</p>
         <p className="text-sm opacity-70">(Preview: nothing was sent)</p>
         <Button
           onClick={() => {

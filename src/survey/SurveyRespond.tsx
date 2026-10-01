@@ -57,7 +57,7 @@ export default function SurveyRespond() {
   }
   const me = mine[snap.id];
   if (!me && !waited) return <Card emoji="📝" title="Checking…" />;
-  if (me?.done) return <Done survey={snap} n={me.n} again={!sent} />;
+  if (me?.done) return <Done survey={snap} again={!sent} />;
   if (closed) {
     return (
       <Card emoji="⏰" title="This survey has closed">
@@ -89,13 +89,13 @@ export default function SurveyRespond() {
   );
 }
 
-function Done({ survey, n, again }: { survey: PublicSurvey; n: number; again: boolean }) {
+function Done({ survey, again }: { survey: PublicSurvey; again: boolean }) {
   useEffect(() => {
     if (!again) burst();
   }, [again]);
   return (
-    <Card emoji={again ? '✅' : '🎉'} title={again ? "You've already shared your feedback" : survey.thanks || 'Thank you! 💛'}>
-      {n > 1 ? `You're one of ${n} people who've shared feedback 💛` : n === 1 && !again ? "You're the first to share feedback 💛" : 'Thank you! 💛'}
+    <Card emoji={again ? '✅' : '🎉'} title={again ? "You've already shared your feedback" : survey.thanks || 'All done! 🙌'}>
+      Thank you for sharing your feedback 💛
     </Card>
   );
 }
