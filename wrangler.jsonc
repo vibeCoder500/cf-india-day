@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cf-india-day",
+  "main": "worker/index.ts",
+  // >= 2026-04-07 so the runtime auto-replies to WebSocket close frames;
+  // kept before 2026-08-04 (when nodejs_compat becomes default) and well within the local workerd's support window.
+  "compatibility_date": "2026-07-01",
+  "observability": { "enabled": true },
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "vars": { "ADMIN_SUFFIX": "_adminControl" },
+  "durable_objects": {
+    "bindings": [{ "name": "GAME", "class_name": "GameRoom" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameRoom"] }]
+}

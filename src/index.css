@@ -1,0 +1,385 @@
+@import "tailwindcss";
+@import "@fontsource-variable/baloo-2/index.css";
+
+@theme {
+  --font-display: "Baloo 2 Variable", ui-rounded, system-ui, sans-serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --color-night: #120a2a;
+  --color-saffron: #ff9933;
+  --color-indiagreen: #138808;
+  --animate-pop: pop 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+  --animate-float: float 4s ease-in-out infinite;
+  --animate-wiggle: wiggle 0.8s ease-in-out infinite;
+  --animate-glow: glow 1.6s ease-in-out infinite;
+  --animate-shake: shake 0.5s ease-in-out both;
+  --animate-boing: boing 0.6s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+  --animate-bob: bob 1.4s ease-in-out infinite;
+
+  @keyframes pop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+  @keyframes wiggle { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+  @keyframes glow { 0%, 100% { box-shadow: 0 0 0 0 rgb(255 153 51 / 0.7); } 50% { box-shadow: 0 0 0 18px rgb(255 153 51 / 0); } }
+  @keyframes shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-9px) rotate(-3deg); } 40% { transform: translateX(9px) rotate(3deg); } 60% { transform: translateX(-6px) rotate(-2deg); } 80% { transform: translateX(5px) rotate(1deg); } }
+  @keyframes boing { 0% { transform: scale(1); } 30% { transform: scale(1.35) rotate(-8deg); } 55% { transform: scale(0.88) rotate(4deg); } 75% { transform: scale(1.08); } 100% { transform: scale(1); } }
+  @keyframes bob { 0%, 100% { transform: translateY(0) rotate(-8deg); } 50% { transform: translateY(-6px) rotate(8deg); } }
+}
+
+:root { color-scheme: dark; }
+
+body {
+  margin: 0;
+  background: var(--color-night);
+  color: #fff;
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+button { touch-action: manipulation; cursor: pointer; }
+input, textarea, select { font-size: 16px; } /* iOS zooms into smaller inputs */
+
+/* ---------- splash ---------- */
+.splash-bg {
+  background:
+    radial-gradient(circle at 25% 20%, #4c1d95 0, transparent 55%),
+    radial-gradient(circle at 75% 80%, #0c4a6e 0, transparent 50%),
+    radial-gradient(circle at 80% 15%, #9a3412 0, transparent 40%);
+}
+.splash-text { /* sits inside the photo reel, which caps its size (--reel-fs) */
+  font-size: min(clamp(2rem, 9vw, 5.5rem), var(--reel-fs, 9vw));
+  max-width: 11em; /* two lines */
+  line-height: 1.05;
+  font-weight: 800;
+  text-align: center;
+  text-shadow: 0 0 18px rgb(255 255 255 / 0.35), 0 4px 0 rgb(0 0 0 / 0.35);
+  animation: wobble 0.9s ease-in-out infinite, hue 4s linear infinite;
+}
+.wave-letter { display: inline-block; animation: wave 1s ease-in-out infinite; }
+.splash-text.splash-big { font-size: min(clamp(2.5rem, 5vw, 6.5rem), var(--reel-fs, 5vw)); }
+@media (max-aspect-ratio: 1/1) { .splash-text { max-width: 7.2em; } } /* three lines on portrait screens */
+@keyframes wave { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-0.18em) rotate(-4deg); } }
+@keyframes wobble { 0%, 100% { transform: rotate(-5deg) scale(1); } 50% { transform: rotate(5deg) scale(1.08); } }
+@keyframes hue { to { filter: hue-rotate(360deg); } }
+.splash-progress { transform-origin: left; animation: grow linear forwards; }
+@keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* ---------- photo reel (PhotoReel.tsx): party photos revolving round the splash text ---------- */
+/* The stage stops above the band (on phones also above the splash's Enter button) and clips: photos never reach the animals.
+   PhotoReel.tsx sets --reel-fs (text size cap) and --ih (photo height) in px, and each card's transform, opacity and z-index. */
+.reel {
+  position: absolute;
+  inset-inline: 0;
+  top: max(0.5rem, env(safe-area-inset-top));
+  bottom: calc(var(--band-w) * 0.3125 + max(0.75rem, env(safe-area-inset-bottom)) + 6rem);
+  overflow: hidden;
+  isolation: isolate;
+  pointer-events: none;
+}
+.reel-big { bottom: calc(var(--band-w) * 0.3125 + 1.5rem); }
+.reel-text {
+  position: absolute;
+  left: 0;
+  top: 0;
+  translate: -50% -50%;
+  width: max-content;
+  max-width: 94vw;
+  z-index: 100; /* photos in the front half of the ring get 101+, the back half 1-99 */
+  will-change: transform;
+}
+.reel-text::before { /* a soft shade between the text and the photos passing behind it */
+  content: "";
+  position: absolute;
+  inset: -18% -10%;
+  z-index: -1;
+  background: radial-gradient(closest-side, rgb(18 10 42 / 0.6), rgb(18 10 42 / 0.35) 60%, transparent);
+}
+.reel-card { /* a frame of film */
+  position: absolute;
+  left: 0;
+  top: 0;
+  translate: -50% -50%;
+  padding: calc(var(--ih) * 0.11) calc(var(--ih) * 0.04);
+  border-radius: calc(var(--ih) * 0.04);
+  background: #16101f;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12), 0 calc(var(--ih) * 0.06) calc(var(--ih) * 0.2) rgb(0 0 0 / 0.55);
+  opacity: 0;
+  will-change: transform, opacity;
+}
+.reel-card::before, .reel-card::after { /* sprocket holes */
+  content: "";
+  position: absolute;
+  inset-inline: calc(var(--ih) * 0.05);
+  height: calc(var(--ih) * 0.055);
+  background: radial-gradient(closest-side, rgb(255 244 222 / 0.85) 66%, transparent 76%) center / calc(var(--ih) * 0.1) 100% space no-repeat;
+}
+.reel-card::before { top: calc(var(--ih) * 0.0275); }
+.reel-card::after { bottom: calc(var(--ih) * 0.0275); }
+.reel-shot { position: relative; overflow: hidden; border-radius: calc(var(--ih) * 0.025); }
+.reel-shot img { display: block; height: var(--ih); width: auto; max-width: none; animation: reel-zoom 9s ease-in-out infinite; }
+.reel-glint {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 36%, rgb(255 255 255 / 0.4) 50%, transparent 64%);
+  will-change: transform;
+}
+@keyframes reel-zoom { from { scale: 1; translate: 0 0; } to { scale: 1.07; translate: 1.5% -1%; } }
+
+/* ---------- floating reactions (presenter) ---------- */
+.float-rx { position: absolute; bottom: -4rem; animation: rise linear forwards; will-change: transform, opacity; }
+@keyframes rise {
+  0% { transform: translateY(0) scale(0.6); opacity: 0; }
+  10% { opacity: 1; }
+  100% { transform: translateY(-85vh) scale(1.3) rotate(20deg); opacity: 0; }
+}
+
+/* ---------- playful micro-animations ---------- */
+/* Uses the `scale` property so it composes with any transform a button already has. */
+.jelly { animation: jelly 0.45s cubic-bezier(0.3, 1.5, 0.5, 1); }
+@keyframes jelly {
+  0% { scale: 1 1; }
+  30% { scale: 1.12 0.88; }
+  45% { scale: 0.92 1.08; }
+  60% { scale: 1.05 0.95; }
+  80% { scale: 0.98 1.02; }
+  100% { scale: 1 1; }
+}
+
+/* ---------- spirit-animal bubbles (presenter) ---------- */
+/* Layers: the physics sets `transform` on the wrapper; these animate `scale`, so they never fight over one property. */
+.spirit-bubble {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  text-align: center;
+  line-height: 1.1;
+  color: #fff;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.6);
+  border: 1.5px solid rgb(255 255 255 / 0.55);
+  box-shadow: inset 0 0 18px rgb(255 255 255 / 0.2), inset -8px -10px 22px rgb(0 0 0 / 0.2), 0 10px 28px rgb(0 0 0 / 0.32);
+  animation: spirit-wobble 4.2s ease-in-out infinite;
+  cursor: zoom-in;
+}
+.spirit-bubble::before { /* glossy highlight */
+  content: "";
+  position: absolute;
+  left: 15%;
+  top: 9%;
+  width: 38%;
+  height: 22%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(255 255 255 / 0.85), rgb(255 255 255 / 0));
+  transform: rotate(-32deg);
+  pointer-events: none;
+}
+.spirit-bubble::after { /* soap-film rainbow on the rim */
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: conic-gradient(from 210deg, rgb(255 0 170 / 0.22), rgb(0 200 255 / 0.22), rgb(255 230 0 / 0.2), rgb(0 255 160 / 0.18), rgb(255 0 170 / 0.22));
+  -webkit-mask: radial-gradient(closest-side, transparent 78%, #000 98%);
+  mask: radial-gradient(closest-side, transparent 78%, #000 98%);
+  pointer-events: none;
+}
+.spirit-held { outline: 3px solid rgb(255 255 255 / 0.9); outline-offset: 3px; }
+.spirit-zoomed { animation: none; cursor: default; }
+.spirit-in { animation: spirit-in 0.7s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
+.spirit-pop { animation: spirit-pop 0.45s ease-out forwards; }
+.spirit-swap { animation: spirit-swap 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
+@keyframes spirit-wobble {
+  0%, 100% { scale: 1 1; }
+  25% { scale: 1.035 0.97; }
+  50% { scale: 0.975 1.03; }
+  75% { scale: 1.02 0.985; }
+}
+@keyframes spirit-in { from { scale: 0; opacity: 0; } to { scale: 1; opacity: 1; } }
+@keyframes spirit-pop { 0% { scale: 1; opacity: 1; } 55% { scale: 1.35; opacity: 0.55; } 100% { scale: 1.6; opacity: 0; } }
+@keyframes spirit-swap { from { scale: 0.4; opacity: 0; } to { scale: 1; opacity: 1; } }
+
+/* Magnifying glass: dark rim, glass glint and a handle at 45°. */
+.spirit-lens {
+  position: relative;
+  border-radius: 9999px;
+  border: 8px solid #2a2838;
+  background: rgb(18 10 42 / 0.9);
+  box-shadow: inset 0 0 0 2px rgb(255 255 255 / 0.35), 0 0 0 3px #77758c, 0 22px 60px rgb(0 0 0 / 0.6);
+  animation: lens-in 0.28s cubic-bezier(0.2, 1.5, 0.4, 1) both;
+}
+.spirit-lens::before { /* glass glint over the content */
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  background: radial-gradient(circle at 20% 16%, rgb(255 255 255 / 0.28), rgb(255 255 255 / 0.05) 18%, transparent 30%);
+  pointer-events: none;
+}
+.spirit-lens::after { /* handle */
+  content: "";
+  position: absolute;
+  left: 78%;
+  top: 86%;
+  width: 15%;
+  height: 48%;
+  border-radius: 14px;
+  background: linear-gradient(90deg, #1d1b28, #55536a 50%, #1d1b28);
+  box-shadow: 0 10px 22px rgb(0 0 0 / 0.5);
+  transform: rotate(-45deg);
+  transform-origin: top center;
+}
+@keyframes lens-in { from { scale: 0.4; opacity: 0; } to { scale: 1; opacity: 1; } }
+
+/* ---------- "Made with 💖" footer ---------- */
+/* data-hover is only set for a real mouse, so touch screens get just the click pop (MadeWith.tsx). */
+.madewith { position: relative; color: rgb(255 255 255 / 0.6); }
+.mw-text { transition: color 0.3s; }
+.madewith[data-hover] .mw-text { color: #fff; }
+.mw-ch, .mw-heart, .mw-beat { display: inline-block; }
+.mw-heart { position: relative; }
+.mw-ring { position: absolute; inset: 0; border: 2px solid #ff5fa2; border-radius: 9999px; opacity: 0; pointer-events: none; }
+.mw-line {
+  width: 2.5em;
+  height: 1px;
+  color: rgb(255 255 255 / 0.25);
+  background: linear-gradient(to right, transparent, currentColor);
+  transition: width 0.5s, color 0.5s, filter 0.5s;
+}
+.mw-line-r { rotate: 180deg; }
+.madewith[data-hover] .mw-line { width: 5em; color: #ff5fa2; filter: drop-shadow(0 0 4px #ff5fa2); }
+.madewith[data-hover] .mw-ch { animation: mw-hop 1.6s ease-in-out infinite, mw-ink 1.6s linear infinite; animation-delay: calc(var(--i) * 40ms); }
+.madewith[data-hover] .mw-beat { animation: mw-beat 0.9s ease-in-out infinite; filter: drop-shadow(0 0 0.3em #ff5fa2); }
+@keyframes mw-hop { 0%, 34%, 100% { translate: 0 0; } 12% { translate: 0 -0.55em; } 24% { translate: 0 0.08em; } }
+@keyframes mw-ink { 0%, 40%, 100% { color: #fff; } 10% { color: #ff9933; } 22% { color: #ff5fa2; } }
+@keyframes mw-beat { 0%, 60%, 100% { scale: 1; } 15% { scale: 1.4; } 30% { scale: 1.1; } 45% { scale: 1.3; } }
+
+/* ---------- animals (Critter.tsx): the splash band and the zoomies ---------- */
+/* Parts animate the individual translate/rotate/scale properties so several loops can move one part at once. */
+.band svg, .zoomie svg { display: block; width: 100%; overflow: visible; }
+.cr-all { transform-origin: 60px 146px; }
+.cr-blink { animation: cr-blink 4.3s infinite; }
+
+:root { --band-w: min(92vw, 40rem, 90vh); } /* PhotoReel's stage also uses it to stay above the band */
+.band {
+  --beat: calc(60s / 124); /* the party music's tempo (music.ts) */
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  translate: -50% 0;
+  width: var(--band-w);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  isolation: isolate;
+  pointer-events: none;
+}
+.band-big, .reel-big { --band-w: min(46vw, 80vh); }
+.band::before { /* stage glow */
+  content: "";
+  position: absolute;
+  inset: 45% -10% 0;
+  z-index: -1;
+  background: radial-gradient(50% 70% at 50% 100%, rgb(255 153 51 / 0.4), transparent);
+}
+.band > div { position: relative; }
+/* The splash's Enter button stands just above the band (4 musicians, each 120 × 150). */
+.above-band { bottom: calc(var(--band-w) * 0.3125 + max(0.75rem, env(safe-area-inset-bottom))); }
+
+.band .cr-all { animation: cr-bounce var(--beat) ease-in-out infinite; }
+.band .cr-leg-l { animation: cr-tap calc(var(--beat) * 2) ease-in-out infinite; }
+.band .cr-leg-r { animation: cr-tap calc(var(--beat) * 2) ease-in-out calc(var(--beat) * -1) infinite; }
+.band-kitten .cr-all { animation: cr-bounce var(--beat) ease-in-out infinite, cr-sway calc(var(--beat) * 4) ease-in-out infinite; }
+.band-kitten .cr-head { animation: cr-sway calc(var(--beat) * 2) ease-in-out infinite; }
+.band-kitten .cr-tail { --wag: 8deg; animation: cr-wag calc(var(--beat) * 2) ease-in-out infinite alternate; }
+.band-strum { animation: band-strum var(--beat) ease-in-out infinite; }
+.band-puppy .cr-ear-l { --flop: 12deg; animation: cr-flop var(--beat) ease-in-out infinite; }
+.band-puppy .cr-ear-r { --flop: -12deg; animation: cr-flop var(--beat) ease-in-out infinite; }
+.band-puppy .cr-tail { animation: cr-wag calc(var(--beat) / 2) ease-in-out infinite alternate; }
+.band-stick-l { --lift: 26deg; animation: band-strike var(--beat) infinite; }
+.band-stick-r { --lift: -26deg; animation: band-strike calc(var(--beat) / 2) calc(var(--beat) / -4) infinite; }
+.band-capybara .cr-all { --hop: -3px; animation: cr-bounce var(--beat) ease-in-out infinite, cr-sway calc(var(--beat) * 8) ease-in-out infinite; }
+.band-capybara .cr-head { animation: cr-nod var(--beat) ease-in-out infinite; }
+.band-capybara .cr-fruit { --sway: 12deg; animation: cr-sway calc(var(--beat) * 2) ease-in-out infinite; }
+.band-key-l { animation: band-press calc(var(--beat) * 2) ease-out infinite; }
+.band-key-r { animation: band-press calc(var(--beat) * 2) ease-out calc(var(--beat) * -1) infinite; }
+.band-squirrel .cr-all { --hop: -11px; }
+.band-squirrel .cr-tail { --wag: 5deg; animation: cr-wag calc(var(--beat) * 2) ease-in-out infinite alternate; }
+.band-shake-l { animation: band-shake calc(var(--beat) / 2) ease-in-out infinite alternate; }
+.band-shake-r { animation: band-shake calc(var(--beat) / 2) ease-in-out calc(var(--beat) / -2) infinite alternate; }
+.band-note {
+  position: absolute;
+  translate: -50% -50%;
+  font-size: calc(var(--band-w) / 15);
+  font-weight: 800;
+  line-height: 1;
+  opacity: 0;
+  text-shadow: 0 2px 6px rgb(0 0 0 / 0.4);
+  animation: band-note calc(var(--beat) * 6) ease-out infinite;
+}
+
+/* Size and path are set by Zoomies.tsx; the keyframes place each runner in screen pixels. */
+.zoomie { position: fixed; top: 0; left: 0; pointer-events: none; will-change: transform; }
+.zoomie-zoom { transform-origin: 50% 100%; }
+.zoomie-flip { position: relative; }
+.zoomie-flip > svg:last-child { position: absolute; inset: 0; }
+.zoomie-dash::before { /* speed lines behind the head, turned by --trail to point back along the run */
+  content: "";
+  position: absolute;
+  inset: -80% 22%;
+  rotate: var(--trail, 0deg);
+  background: repeating-linear-gradient(90deg, transparent 0 12%, rgb(255 255 255 / 0.75) 12% 16%, transparent 16% 33%);
+  -webkit-mask: linear-gradient(to bottom, transparent 6%, #000 30%, transparent 34%);
+  mask: linear-gradient(to bottom, transparent 6%, #000 30%, transparent 34%);
+}
+.zoomie-dash { --stride: 0.2s; }
+.zoomie-zoom { --stride: 0.5s; } /* one footfall per 250 ms hop */
+.cr-fast { --stride: 0.18s; }
+.cr-run .cr-all { animation: cr-bob calc(var(--stride) / 2) ease-in-out infinite alternate; }
+.cr-run .cr-leg-l { animation: cr-step var(--stride) linear infinite; }
+.cr-run .cr-leg-r { animation: cr-step var(--stride) linear calc(var(--stride) / -2) infinite; }
+.cr-run .cr-arm-l { --pump: 24deg; animation: cr-pump var(--stride) ease-in-out infinite; }
+.cr-run .cr-arm-r { --pump: -24deg; animation: cr-pump var(--stride) ease-in-out infinite; }
+.cr-run .cr-ear-l { --flop: 14deg; animation: cr-flop calc(var(--stride) / 2) ease-in-out infinite; }
+.cr-run .cr-ear-r { --flop: -14deg; animation: cr-flop calc(var(--stride) / 2) ease-in-out infinite; }
+.cr-run .cr-tail { animation: cr-wag calc(var(--stride) / 2) ease-in-out infinite alternate; }
+.cr-run.cr-squirrel .cr-tail { --wag: 7deg; } /* that tail is half the squirrel */
+.cr-whee .cr-arm-l { --up: 110deg; animation: cr-wave calc(var(--stride) / 2) ease-in-out infinite alternate; }
+.cr-whee .cr-arm-r { --up: -110deg; animation: cr-wave calc(var(--stride) / 2) ease-in-out infinite alternate; }
+
+@keyframes cr-blink { 0%, 94%, 100% { scale: 1 1; } 97% { scale: 1 0.1; } }
+@keyframes cr-bounce {
+  0%, 100% { translate: 0 0; scale: 1.05 0.95; }
+  35% { translate: 0 var(--hop, -7px); scale: 0.97 1.03; }
+  70% { translate: 0 0; scale: 1 1; }
+}
+@keyframes cr-sway { 0%, 100% { rotate: calc(var(--sway, 4deg) * -1); } 50% { rotate: var(--sway, 4deg); } }
+@keyframes cr-tap { 0%, 30%, 100% { translate: 0 0; } 12% { translate: 0 -4px; } }
+@keyframes cr-wag { from { rotate: calc(var(--wag, 20deg) * -1); } to { rotate: var(--wag, 20deg); } }
+@keyframes cr-flop { 0%, 100% { rotate: 0deg; } 35% { rotate: var(--flop); } }
+@keyframes cr-nod { 0%, 100% { translate: 0 2px; } 50% { translate: 0 -1px; } }
+@keyframes cr-bob { from { translate: 0 0; } to { translate: 0 -5px; } }
+@keyframes cr-step { 0%, 50%, 100% { translate: 0 0; } 25% { translate: 0 -10px; } }
+@keyframes cr-pump { 0%, 100% { rotate: var(--pump); } 50% { rotate: calc(var(--pump) * -1); } }
+@keyframes cr-wave { from { rotate: calc(var(--up) * 0.8); } to { rotate: calc(var(--up) * 1.15); } }
+@keyframes band-strum { 0%, 100% { rotate: -10deg; } 25% { rotate: 10deg; } 50% { rotate: -6deg; } 75% { rotate: 8deg; } }
+@keyframes band-strike { /* the stick lands on the beat */
+  0% { rotate: 0deg; animation-timing-function: ease-out; }
+  45% { rotate: var(--lift); animation-timing-function: ease-in; }
+  100% { rotate: 0deg; }
+}
+@keyframes band-press { 0%, 22% { translate: 0 2px; } 34%, 100% { translate: 0 0; } }
+@keyframes band-shake { from { rotate: -9deg; } to { rotate: 9deg; } }
+@keyframes band-note {
+  0% { transform: translate(0, 0) scale(0.4) rotate(-15deg); opacity: 0; }
+  15% { opacity: 1; }
+  50% { transform: translate(0.5em, -2em) scale(1) rotate(10deg); }
+  100% { transform: translate(-0.3em, -4.2em) scale(0.9) rotate(-10deg); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wave-letter, .splash-text, .reel-shot img { animation: none; } /* PhotoReel.tsx draws one still pose */
+  .jelly, .animate-shake, .animate-boing, .animate-bob, .animate-wiggle, .animate-float { animation: none; }
+  .spirit-bubble, .spirit-in, .spirit-swap, .spirit-lens { animation: none; }
+  .madewith[data-hover] .mw-ch, .madewith[data-hover] .mw-beat { animation: none; }
+  .band * { animation: none !important; } /* a still band; Zoomies.tsx skips the run-bys entirely */
+}
