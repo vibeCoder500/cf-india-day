@@ -108,7 +108,7 @@ export type SurveyClientMsg =
 
 export type SurveyServerMsg =
   | { t: 'survey'; now: number; survey: PublicSurvey | null } // every socket, including ones that haven't joined
-  | { t: 'survey:me'; sid: string; done: boolean; n: number }
+  | { t: 'survey:me'; sid: string; done: boolean } // never a response count: respondents don't learn how many answered
   | { t: 'survey:ack'; ref: string; ok: boolean; code?: ErrorCode }
   | { t: 'surveys'; now: number; list: AdminSurvey[] } // hosts
   | { t: 'survey:data'; now: number; data: SurveyData }; // hosts, on request

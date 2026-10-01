@@ -78,7 +78,6 @@ export default function SurveyRespond() {
         survey={snap}
         sending={sending}
         closing={!live || live.id !== snap.id}
-        n={me?.n}
         onSubmit={(answers: SurveyAnswers) => {
           sentAt.current = Date.now();
           setSent(true);

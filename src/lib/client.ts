@@ -23,7 +23,7 @@ export interface ClientState {
   pending: Record<string, true>; // answer refs awaiting ack
   survey: PublicSurvey | null; // the live survey (sent to the survey site, which never logs in)
   surveyHeard: boolean; // the server has said which survey is live (possibly none)
-  surveyMe: Record<string, { done: boolean; n: number }>; // per survey id: has this device responded? (+ total so far)
+  surveyMe: Record<string, { done: boolean }>; // per survey id: has this device responded?
   surveySending: { ref: string; sid: string } | null; // a submission awaiting its ack
   surveys: AdminSurvey[] | null; // hosts
   surveyData: SurveyData | null; // hosts: results of the survey that is open
@@ -290,15 +290,14 @@ class GameClient {
         this.surveyCheck(); // also after a host reset, so a stale "done" clears
         return;
       case 'survey:me':
-        this.set({ surveyMe: { ...this.state.surveyMe, [m.sid]: { done: m.done, n: m.n } } });
+        this.set({ surveyMe: { ...this.state.surveyMe, [m.sid]: { done: m.done } } });
         return;
       case 'survey:ack': {
         const sending = this.state.surveySending;
         if (sending?.ref !== m.ref) return;
         if (m.ok || m.code === 'ALREADY_ANSWERED') {
           clearDraft(sending.sid);
-          const n = this.state.surveyMe[sending.sid]?.n ?? 0; // survey:me with the real total follows the ack
-          this.set({ surveySending: null, surveyMe: { ...this.state.surveyMe, [sending.sid]: { done: true, n } } });
+          this.set({ surveySending: null, surveyMe: { ...this.state.surveyMe, [sending.sid]: { done: true } } });
         } else {
           const code = m.code ?? 'BAD_REQUEST';
           this.set({ surveySending: null, error: { code, message: SURVEY_FRIENDLY[code] ?? 'Something went wrong', at: Date.now() } });

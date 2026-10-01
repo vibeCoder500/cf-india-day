@@ -30,13 +30,12 @@ export interface SurveyFormProps {
   preview?: boolean; // the host's preview: nothing is saved or sent
   sending?: boolean;
   closing?: boolean; // the survey just closed, but answers still count for a moment
-  n?: number; // responses so far
   onSubmit: (answers: SurveyAnswers) => void;
   onExit?: () => void; // the host's preview closes with it; the survey site has nowhere to go back to
 }
 
 // Intro → one question per screen → review → send. Answers are kept on this device until they're sent.
-export default function SurveyForm({ survey, preview = false, sending = false, closing = false, n, onSubmit, onExit }: SurveyFormProps) {
+export default function SurveyForm({ survey, preview = false, sending = false, closing = false, onSubmit, onExit }: SurveyFormProps) {
   const qs = survey.questions;
   const [draft] = useState(() => (preview ? null : loadDraft(survey.id, qs)));
   const [answers, setAnswers] = useState<SurveyAnswers>(() => draft?.answers ?? {});
@@ -132,7 +131,6 @@ export default function SurveyForm({ survey, preview = false, sending = false, c
           <div className="flex flex-wrap justify-center gap-2 text-sm font-bold">
             <span className="rounded-full bg-white/10 px-3 py-1">⏱ ~{surveyMinutes(qs)} min</span>
             <span className="rounded-full bg-white/10 px-3 py-1">❓ {qs.length} questions</span>
-            {n !== undefined && n >= 3 && <span className="rounded-full bg-white/10 px-3 py-1">🎉 {n} have shared</span>}
           </div>
           <p className="rounded-2xl bg-white/5 px-4 py-3 text-sm">{mode}</p>
           <p className="text-sm opacity-80">

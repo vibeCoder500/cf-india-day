@@ -167,7 +167,7 @@ export class Surveys {
     const s = this.byId(sid);
     if (!s || s.opensAt === null) return;
     const fp = await this.fingerprints(s, [`d:${device}`]);
-    this.send(ws, { t: 'survey:me', sid: s.id, done: fp !== null && this.hasBallot(s.id, fp.hs[0]), n: s.n });
+    this.send(ws, { t: 'survey:me', sid: s.id, done: fp !== null && this.hasBallot(s.id, fp.hs[0]) });
   }
 
   // No logins: one response per device, recognised by a keyed fingerprint of the device id.
@@ -214,7 +214,7 @@ export class Surveys {
     if (sealed && s.pending >= 2 * s.k) this.reveal(s, s.k);
     this.bump(s);
     ack(true);
-    this.send(ws, { t: 'survey:me', sid: s.id, done: true, n: s.n });
+    this.send(ws, { t: 'survey:me', sid: s.id, done: true });
     this.toAdminsSoon();
   }
 
