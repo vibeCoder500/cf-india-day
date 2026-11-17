@@ -1,9 +1,11 @@
 import type { Branding, Costume, Display, Question, QuestionType } from './protocol';
 
-export const ROOM_NAME = 'cf-india-day';
+export const ROOM_NAME = 'edap-offsite';
+export const DEFAULT_EVENT_ID = 'icebreaker';
+export const DEFAULT_EVENT_NAME = 'icebreaker';
 export const DEFAULT_ADMIN_SUFFIX = '_adminControl';
-export const DEFAULT_APP_NAME = 'CorpFun Day';
-export const SPLASH_TEXT = 'Yayyyyyyyy, itssss CorpFun Dayyyy 🥳🤩';
+export const DEFAULT_APP_NAME = 'eDAP Offsite';
+export const SPLASH_TEXT = 'Welcome to eDAP Offsite 🥳🤩';
 export const SPLASH_MS = 10_000;
 
 export const COSTUMES: readonly Costume[] = ['rockstar', 'chef', 'wizard', 'captain', 'hero', 'viking'];

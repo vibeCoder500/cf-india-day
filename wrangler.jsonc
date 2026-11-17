@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "fun-day-app",
+  "name": "edap-offsite",
   "main": "worker/index.ts",
   // >= 2026-04-07 so the runtime auto-replies to WebSocket close frames;
   // kept before 2026-08-04 (when nodejs_compat becomes default) and well within the local workerd's support window.

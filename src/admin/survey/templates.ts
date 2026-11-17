@@ -4,29 +4,28 @@ import { defaultSurveyQuestion } from '../../../shared/survey';
 
 const q = (type: SurveyType, patch: Partial<SurveyQuestion>): SurveyQuestion => ({ ...defaultSurveyQuestion(type), ...patch });
 
-// Feedback for the townhall + icebreaker, the deep dives with Mohit and the team painting. Wording and in-jokes match
-// the questions people played on the day.
-export const CORPFUN_REVIEW: SurveyDraft = {
+// Feedback for the eDAP Offsite sessions, leadership deep dives, icebreakers, and team activities.
+export const EDAP_OFFSITE_REVIEW: SurveyDraft = {
   id: '',
-  title: 'CorpFun Day — The Review 🍿',
-  intro: 'Mohit came, saw and deep-dived 🤿 Now it’s your turn to review the show! About 3 minutes — your honest answers shape the next CorpFun Day 💛',
+  title: 'eDAP Offsite — The Review 🍿',
+  intro: 'We connected, collaborated, and deep-dived together 🤿 Now it’s your turn to review the offsite! About 3 minutes — your honest answers shape the next eDAP Offsite 💛',
   thanks: 'Dhanyavaad! 🙏 Your review just hit the box office. Now go grab a chai ☕',
   questions: [
     // 🎬 The big picture
     q('poll', {
-      text: 'If CorpFun Day were a movie, what’s the box-office verdict? 🎬',
+      text: 'If eDAP Offsite were a movie, what’s the box-office verdict? 🎬',
       options: ['All-time blockbuster 🏆', 'Superhit 🔥', 'Hit 👍', 'Average 😐', 'Flop 🍅'],
     }),
     q('scale', {
-      text: 'How likely are you to recommend a CorpFun Day to a friend in another team?',
+      text: 'How likely are you to recommend an eDAP Offsite like this to a colleague in another team?',
       hint: '0 = not a chance · 10 = absolutely',
       min: 0, max: 10, minLabel: 'Not a chance 🙅', maxLabel: 'Already forwarding it 📨', display: 'gauge',
     }),
-    // 🎤 Townhall & icebreakers
-    q('scale', { text: 'How well did the icebreaker game warm up the townhall? 🔥', minLabel: 'Still frozen 🧊', maxLabel: 'Room on fire 🔥' }),
+    // 🎤 Sessions & icebreakers
+    q('scale', { text: 'How well did the icebreaker game warm up the room? 🔥', minLabel: 'Still frozen 🧊', maxLabel: 'Room on fire 🔥' }),
     q('multi', {
       text: 'Your favourite icebreaker moments? ⭐',
-      hint: 'Pick up to 3 · skip if you missed the townhall',
+      hint: 'Pick up to 3 · skip if you missed the session',
       required: false,
       maxPicks: 3,
       options: [
@@ -40,66 +39,60 @@ export const CORPFUN_REVIEW: SurveyDraft = {
         '🐾 The spirit-animal census',
       ],
     }),
-    // 🤿 Deep dives with Mohit
+    // 🤿 Leadership & strategy deep dives
     q('poll', {
-      text: 'Your team’s deep dive with Mohit was most like... 🏏',
+      text: 'The strategy & deep-dive sessions felt most like... 🏏',
       options: [
-        'A Test match: long, thorough, worth every session',
+        'A Test match: thorough, thoughtful, worth every session',
         'A T20: fast, high-energy, over too soon ⚡',
-        'A Super Over: intense and nail-biting 😬',
-        'A DRS review: every slide under the microscope 🔍',
-        'I wasn’t in one 🙈',
+        'A Super Over: intense and action-packed 🔥',
+        'A DRS review: every detail under the microscope 🔍',
+        'I missed them 🙈',
       ],
     }),
     q('scale', {
-      text: 'How useful was the deep-dive conversation for your team? 🎯',
-      hint: 'Skip if you weren’t in one',
+      text: 'How useful were the strategy & deep-dive conversations for your team? 🎯',
+      hint: 'Skip if you missed them',
       required: false, minLabel: 'Just slides 😶', maxLabel: 'Game-changer 🚀',
     }),
     q('scale', {
-      text: 'How heard did your team feel? 👂',
-      hint: 'Skip if you weren’t in one',
+      text: 'How heard and connected did your team feel? 👂',
+      hint: 'Skip if you missed them',
       required: false, minLabel: 'Like a muted Teams call 🔇', maxLabel: 'Every word landed 🎯',
     }),
-    q('poll', {
-      text: 'Was the deep-dive prep worth it? 🌙',
-      required: false,
-      options: ['Totally worth the late nights 🚀', 'Worth it, but phew 😮‍💨', 'Too much prep for the time we got ⏳', 'Wasn’t part of the prep 🙋'],
-    }),
-    q('wordcloud', { text: 'One word for meeting Mohit ☁️', hint: 'First word that comes to mind', required: false }),
-    // 🎨 Team painting
+    q('wordcloud', { text: 'One word for the eDAP Offsite vibe ☁️', hint: 'First word that comes to mind', required: false }),
+    // 🎨 Team bonding
     q('animal', {
-      text: 'Which animal were you during the team painting? 🎨',
-      hint: 'Skip if you missed the painting',
+      text: 'Which animal were you during the team activities? 🎨',
+      hint: 'Skip if you missed the activities',
       required: false,
       options: ['ant', 'bee', 'owl', 'monkey', 'peacock', 'tortoise', 'elephant', 'badger'],
       display: 'bars',
     }),
     q('scale', {
-      text: 'Did the painting bring your team closer? 🫶',
-      hint: 'Skip if you missed it',
-      required: false, minLabel: 'Still fighting over colours 🎨', maxLabel: 'Basically family now 🫶',
+      text: 'Did the offsite bring the team closer together? 🫶',
+      required: false, minLabel: 'Still warming up 🌱', maxLabel: 'Basically family now 🫶',
     }),
     // 🍛 Logistics
     q('poll', {
-      text: 'The day’s length was... ⏱️',
+      text: 'The offsite pace & length were... ⏱️',
       options: ['Too short, I wanted more 😩', 'Just right 👌', 'A bit long, my chai wore off ☕', 'Too long, I aged a year 👴'],
     }),
-    q('scale', { text: 'Rate the food 🍛', required: false, minLabel: 'Hunger games 😵', maxLabel: 'Shaadi-level feast 🤤' }),
+    q('scale', { text: 'Rate the food & refreshments 🍛', required: false, minLabel: 'Hunger games 😵', maxLabel: 'Shaadi-level feast 🤤' }),
     // 🚀 Next time
     q('multi', {
-      text: 'What should the next CorpFun Day include? 🚀',
+      text: 'What should the next eDAP Offsite include? 🚀',
       hint: 'Pick up to 3',
       required: false,
       maxPicks: 3,
       options: [
         '🏏 Box-cricket tournament',
         '💻 Mini hackathon',
-        '🗺️ Office treasure hunt',
+        '🗺️ Treasure hunt',
         '🎤 Karaoke & open mic',
         '🍳 Cooking challenge',
-        '🎨 Another painting session',
-        '🏔️ Day trip / offsite',
+        '🎨 Creative team workshop',
+        '🏔️ Outdoor adventure',
         '🎲 Board games & chai',
       ],
     }),
@@ -107,7 +100,7 @@ export const CORPFUN_REVIEW: SurveyDraft = {
       text: 'One thing we must KEEP, and one thing to CHANGE next time ✍️',
       hint: 'Please don’t name colleagues — focus on the event',
     }),
-    q('wordcloud', { text: 'Sum up the whole day as an HTTP status code 🌐', hint: 'e.g. 200 OK, 201 Created, 418 I’m a teapot', required: false }),
+    q('wordcloud', { text: 'Sum up the whole offsite as an HTTP status code 🌐', hint: 'e.g. 200 OK, 201 Created, 418 I’m a teapot', required: false }),
   ],
 };
 
@@ -126,18 +119,18 @@ export const QUICK_PULSE: SurveyDraft = {
   ],
 };
 
-export const SURVEY_TEMPLATES = [CORPFUN_REVIEW, QUICK_PULSE];
+export const SURVEY_TEMPLATES = [EDAP_OFFSITE_REVIEW, QUICK_PULSE];
 
 export function surveyTemplates(appName = DEFAULT_APP_NAME): SurveyDraft[] {
   const label = appName.trim() || DEFAULT_APP_NAME;
   if (label === DEFAULT_APP_NAME) return SURVEY_TEMPLATES;
-  const sub = (s: string) => s.replaceAll('CorpFun Day', label);
+  const sub = (s: string) => s.replaceAll('eDAP Offsite', label);
   return [
     {
-      ...CORPFUN_REVIEW,
-      title: sub(CORPFUN_REVIEW.title),
-      intro: sub(CORPFUN_REVIEW.intro),
-      questions: CORPFUN_REVIEW.questions.map((x) => ({ ...x, text: sub(x.text) })),
+      ...EDAP_OFFSITE_REVIEW,
+      title: sub(EDAP_OFFSITE_REVIEW.title),
+      intro: sub(EDAP_OFFSITE_REVIEW.intro),
+      questions: EDAP_OFFSITE_REVIEW.questions.map((x) => ({ ...x, text: sub(x.text) })),
     },
     QUICK_PULSE,
   ];

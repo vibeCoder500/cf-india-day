@@ -2,20 +2,16 @@ import { createContext, useContext } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import type { Costume, CustomLeader } from '../../shared/protocol';
 import { COSTUMES, mediaUrl } from '../../shared/constants';
-import captain from '../assets/heads/captain.webp';
-import captainBack from '../assets/heads/captain-back.webp';
-import chef from '../assets/heads/chef.webp';
-import chefBack from '../assets/heads/chef-back.webp';
-import hero from '../assets/heads/hero.webp';
-import heroBack from '../assets/heads/hero-back.webp';
-import rockstar from '../assets/heads/rockstar.webp';
-import rockstarBack from '../assets/heads/rockstar-back.webp';
-import viking from '../assets/heads/viking.webp';
-import vikingBack from '../assets/heads/viking-back.webp';
-import wizard from '../assets/heads/wizard.webp';
-import wizardBack from '../assets/heads/wizard-back.webp';
+import bala from '../assets/heads/bala.webp';
+import balaBack from '../assets/heads/bala-back.webp';
+import dave from '../assets/heads/dave.webp';
+import daveBack from '../assets/heads/dave-back.webp';
+import michael from '../assets/heads/michael.webp';
+import michaelBack from '../assets/heads/michael-back.webp';
+import vijay from '../assets/heads/vijay.webp';
+import vijayBack from '../assets/heads/vijay-back.webp';
 
-// Six default leaders as bobblehead caricatures (or any custom leader photos transformed in the Host Console):
+// Four built-in eDAP Offsite leaders as bobblehead caricatures (plus any custom leader photos transformed in the Host Console):
 // each head file is 660 × 780 px with the face 264 px wide (cheek to cheek) and the point between the eyes at
 // (330, 375), so one placement fits every costume. The *-back files are the same outline in hair colour.
 export type Person = Costume;
@@ -37,22 +33,20 @@ const HEAD = { x: 60 - 330 * K, y: EYES - 375 * K, w: 660 * K, h: 780 * K };
 
 type Look = { front: string; back: string; sleeve: string; hand: string };
 const LOOKS: Record<Person, Look> = {
-  rockstar: { front: rockstar, back: rockstarBack, sleeve: '#1f1f26', hand: '#9a6448' },
-  chef: { front: chef, back: chefBack, sleeve: '#fbfbf8', hand: '#c08a6e' },
-  wizard: { front: wizard, back: wizardBack, sleeve: '#6c3fc7', hand: '#b57a5f' },
-  captain: { front: captain, back: captainBack, sleeve: '#b91c1c', hand: '#c4896d' },
-  hero: { front: hero, back: heroBack, sleeve: '#2a6fdb', hand: '#e63946' }, // red gloves
-  viking: { front: viking, back: vikingBack, sleeve: '#3a7d44', hand: '#8f6450' },
+  rockstar: { front: michael, back: michaelBack, sleeve: '#1f1f26', hand: '#d59363' },
+  chef: { front: bala, back: balaBack, sleeve: '#fbfbf8', hand: '#9c6349' },
+  wizard: { front: bala, back: balaBack, sleeve: '#6c3fc7', hand: '#9c6349' },
+  captain: { front: dave, back: daveBack, sleeve: '#b91c1c', hand: '#dca68d' },
+  hero: { front: vijay, back: vijayBack, sleeve: '#2a6fdb', hand: '#e63946' }, // red gloves
+  viking: { front: dave, back: daveBack, sleeve: '#3a7d44', hand: '#dca68d' },
 };
 
-export const DEFAULT_ACTORS: readonly Actor[] = PEOPLE.map((who) => ({
-  id: who,
-  name: who,
-  costume: who,
-  front: LOOKS[who].front,
-  back: LOOKS[who].back,
-  hand: LOOKS[who].hand,
-}));
+export const DEFAULT_ACTORS: readonly Actor[] = [
+  { id: 'bala', name: 'Bala', costume: 'wizard', front: bala, back: balaBack, hand: '#9c6349' },
+  { id: 'dave', name: 'Dave', costume: 'captain', front: dave, back: daveBack, hand: '#dca68d' },
+  { id: 'vijay', name: 'Vijay', costume: 'hero', front: vijay, back: vijayBack, hand: '#e63946' },
+  { id: 'michael', name: 'Michael', costume: 'rockstar', front: michael, back: michaelBack, hand: '#d59363' },
+];
 
 export function actorFromLeader(l: CustomLeader, index = 0): Actor {
   return {

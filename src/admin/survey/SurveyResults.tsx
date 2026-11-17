@@ -50,7 +50,7 @@ export default function SurveyResults({ s, live, closing, copy }: { s: AdminSurv
   const visible = d.released - d.hidden;
   const sealing = s.anonymous && s.k > 1;
   const maxDay = Math.max(1, ...d.perDay.map((p) => p.n));
-  const file = `corpfun-survey-${slug(s.title)}-${istDay(Date.now())}`;
+  const file = `edap-offsite-survey-${slug(s.title)}-${istDay(Date.now())}`;
 
   return (
     <div className="flex flex-col gap-4">

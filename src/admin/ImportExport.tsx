@@ -15,7 +15,7 @@ export default function ImportExport({ questions, eventId, eventName }: { questi
     const a = document.createElement('a');
     a.href = url;
     const slug = eventName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'event';
-    a.download = `corpfun-day-${slug}-questions.json`;
+    a.download = `edap-offsite-${slug}-questions.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };

@@ -3,7 +3,11 @@ import type {
   AdminMsg, AdminPlayer, AnimalPick, AnswerValue, Asked, Branding, ClientMsg, ErrorCode, EventInfo, GameState, LeaderRow, LiveMsg, Me, ModItem,
   Question, Results, ServerMsg, ViewMsg,
 } from '../shared/protocol';
-import { AVATARS, DEFAULT_ADMIN_SUFFIX, DEFAULT_BRANDING, FLUSH_MS, FORMATS, GRACE_MS, LIMITS, REACTIONS, mediaUrl } from '../shared/constants';
+import {
+  AVATARS, DEFAULT_ADMIN_SUFFIX, DEFAULT_BRANDING, DEFAULT_EVENT_ID, DEFAULT_EVENT_NAME,
+  FLUSH_MS, FORMATS, GRACE_MS, LIMITS, REACTIONS, mediaUrl,
+} from '../shared/constants';
+import { seedQuestions } from '../shared/seed-questions';
 import { isSurveyClientMsg } from '../shared/survey';
 import { MEDIA_ID_RE, clean, len, parseAnswer, parseBranding, parseName, parseQuestion } from './validate';
 import { Surveys } from './surveys';
@@ -122,8 +126,9 @@ export class GameRoom extends DurableObject<Env> {
     for (const r of this.sql.exec<{ token: string; name: string }>('SELECT token, name FROM admins')) {
       this.admins.set(r.token, r.name);
     }
-    this.events = this.meta<EventInfo[]>('events') ?? [];
-    this.ensureEvents();
+    const savedEvents = this.meta<EventInfo[]>('events');
+    this.events = savedEvents ?? [];
+    this.ensureEvents(savedEvents === null);
     if (this.game.qid) this.loadAnswers(this.game.qid);
     this.surveys = new Surveys(ctx, this.sql, {
       sockets: () => this.conns().map(({ ws, att }) => ({ ws, kind: att?.kind ?? 'anon' })),
@@ -510,11 +515,19 @@ export class GameRoom extends DurableObject<Env> {
     return typeof id === 'string' && this.events.some((e) => e.id === id) ? id : (this.game.eventId ?? this.events[0].id);
   }
 
-  // Data from before events existed: put every question in a default event and make sure one event is live.
-  private ensureEvents() {
+  // Seed a fresh room with the default `icebreaker` event + 22 eDAP Offsite questions, and ensure a valid live event.
+  private ensureEvents(seedInitial = false) {
     if (this.events.length === 0) {
-      this.events = [{ id: randomId(), name: 'Main event' }];
+      this.events = [{ id: DEFAULT_EVENT_ID, name: DEFAULT_EVENT_NAME }];
       this.setMeta('events', this.events);
+    }
+    if (seedInitial && this.questions.length === 0) {
+      this.questions = seedQuestions(this.events[0].id);
+      this.ctx.storage.transactionSync(() => {
+        this.questions.forEach((q, pos) => {
+          this.sql.exec('INSERT INTO questions (id, pos, data) VALUES (?, ?, ?)', q.id, pos, JSON.stringify(q));
+        });
+      });
     }
     const ids = new Set(this.events.map((e) => e.id));
     for (const q of this.questions) {

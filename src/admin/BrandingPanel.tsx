@@ -238,7 +238,7 @@ export default function BrandingPanel({ onNotice }: { onNotice?: (msg: string) =
     leaders: saved.leaders,
   };
 
-  const cleanLabel = appName.trim() || 'Fun Day';
+  const cleanLabel = appName.trim() || DEFAULT_APP_NAME;
   const splashPresets = [
     `Welcome to ${cleanLabel} 🥳🤩`,
     `Yayyyyyyyy, itssss ${cleanLabel} 🥳🤩`,
@@ -294,7 +294,7 @@ export default function BrandingPanel({ onNotice }: { onNotice?: (msg: string) =
               setDirtyText(true);
             }}
             maxLength={LIMITS.appName}
-            placeholder="e.g. Cloud Platform Fun Day"
+            placeholder="e.g. eDAP Offsite"
             className="rounded-xl bg-white/10 px-4 py-2.5 text-base font-semibold outline-none ring-1 ring-white/15 focus:ring-2 focus:ring-saffron"
           />
         </label>
@@ -310,7 +310,7 @@ export default function BrandingPanel({ onNotice }: { onNotice?: (msg: string) =
               setDirtyText(true);
             }}
             maxLength={LIMITS.splashText}
-            placeholder="e.g. Welcome to Cloud Platform Fun Day 🥳🤩"
+            placeholder="e.g. Welcome to eDAP Offsite 🥳🤩"
             className="rounded-xl bg-white/10 px-4 py-2.5 text-base font-semibold outline-none ring-1 ring-white/15 focus:ring-2 focus:ring-saffron"
           />
         </label>
@@ -358,7 +358,7 @@ export default function BrandingPanel({ onNotice }: { onNotice?: (msg: string) =
             <h3 className="font-display text-xl font-bold">📸 Revolving Team Photos</h3>
             <p className="text-xs opacity-70">
               {saved.photos === null
-                ? `Currently using the ${DEFAULT_PHOTOS.length} built-in sample photos. Upload your team pictures to replace them!`
+                ? `Currently using the ${DEFAULT_PHOTOS.length} built-in team photos. Upload more or replace them anytime!`
                 : `${saved.photos.length}/${LIMITS.photos} custom team photo${saved.photos.length === 1 ? '' : 's'} revolving around the title.`}
             </p>
           </div>
@@ -376,7 +376,7 @@ export default function BrandingPanel({ onNotice }: { onNotice?: (msg: string) =
             </Button>
           )}
           {saved.photos !== null && (
-            <Button variant="ghost" onClick={() => commitBranding({ photos: null }, 'Restored default sample photos ✓')}>
+            <Button variant="ghost" onClick={() => commitBranding({ photos: null }, 'Restored default team photos ✓')}>
               ↺ Default photos
             </Button>
           )}
@@ -387,11 +387,11 @@ export default function BrandingPanel({ onNotice }: { onNotice?: (msg: string) =
         )}
 
         {saved.photos === null ? (
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
             {DEFAULT_PHOTOS.map((src, i) => (
               <div key={src} className="relative overflow-hidden rounded-xl bg-black/40 ring-1 ring-white/10">
-                <img src={src} alt={`Default sample ${i + 1}`} className="aspect-video w-full object-cover opacity-80" />
-                <span className="absolute top-1 left-1 rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-bold">Sample {i + 1}</span>
+                <img src={src} alt={`Built-in team photo ${i + 1}`} className="aspect-video w-full object-cover opacity-85" />
+                <span className="absolute top-1 left-1 rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-bold">Team {i + 1}</span>
               </div>
             ))}
           </div>
@@ -448,7 +448,7 @@ export default function BrandingPanel({ onNotice }: { onNotice?: (msg: string) =
             <h3 className="font-display text-xl font-bold">🎭 Leadership Caricatures</h3>
             <p className="text-xs opacity-70">
               {saved.leaders === null
-                ? 'Currently showing the 6 default leader caricatures. Attach your leaders’ photos and we automatically cut out, level, and turn them into animated bobblehead caricatures!'
+                ? `Currently showing the ${DEFAULT_ACTORS.length} built-in leader caricatures. Attach your leaders’ photos and we automatically cut out, level, and turn them into animated bobblehead caricatures!`
                 : `${saved.leaders.length}/${LIMITS.leaders} custom leader caricature${saved.leaders.length === 1 ? '' : 's'} in the splash band & surprise zoomies.`}
             </p>
           </div>
@@ -483,16 +483,16 @@ export default function BrandingPanel({ onNotice }: { onNotice?: (msg: string) =
         )}
 
         {saved.leaders === null ? (
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
             {DEFAULT_ACTORS.map((actor) => {
               const info = COSTUME_INFO[actor.costume];
               return (
-                <div key={actor.id} className="flex flex-col items-center gap-1 rounded-xl bg-black/30 p-2 ring-1 ring-white/10">
-                  <div className="w-20 opacity-85">
+                <div key={actor.id} className="flex flex-col items-center gap-1 rounded-xl bg-black/30 p-2.5 ring-1 ring-white/10">
+                  <div className="w-20 opacity-90">
                     <Caricature actor={actor} />
                   </div>
-                  <span className="text-[11px] font-bold opacity-75">
-                    {info.emoji} {info.label}
+                  <span className="text-[11px] font-bold opacity-80">
+                    {info.emoji} {actor.name} · {info.label}
                   </span>
                 </div>
               );
