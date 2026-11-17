@@ -240,7 +240,7 @@ let seq = 0;
 // Now and then one of the leaders' bobbleheads (sometimes a few) zooms across this screen with a "wheee!" and is gone
 // before anyone else looks. Each phone picks its own moments and directions, so nobody else sees the same one.
 // The gap after the previous runners have gone is minGapMs–maxGapMs; `pops` adds the pop-in from any edge.
-export default function Zoomies({ minGapMs = 16_000, maxGapMs = 60_000, pops = false }: { minGapMs?: number; maxGapMs?: number; pops?: boolean }) {
+export default function Zoomies({ minGapMs = 10_000, maxGapMs = 15_000, pops = false }: { minGapMs?: number; maxGapMs?: number; pops?: boolean }) {
   const savedLeaders = useGame((s) => s.branding.leaders);
   const actors = useMemo(() => actorsOf(savedLeaders), [savedLeaders]);
   const [runs, setRuns] = useState<Run[]>([]);

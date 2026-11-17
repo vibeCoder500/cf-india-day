@@ -37,8 +37,8 @@ export default function SurveySite() {
           <SurveyRespond />
         )}
       </div>
-      {/* The leaders' caricatures pop in, dash past or zoom up close every 15–30 s, with their sounds. */}
-      <Zoomies minGapMs={15_000} maxGapMs={30_000} pops />
+      {/* The leaders' caricatures pop in, dash past or zoom up close every 10–15 s, with their sounds. */}
+      <Zoomies minGapMs={10_000} maxGapMs={15_000} pops />
     </div>
   );
 }
