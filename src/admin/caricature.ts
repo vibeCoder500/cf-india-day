@@ -791,11 +791,11 @@ export async function renderCaricature(
       }
 
       if (y <= chinY - 8) {
-        // Above chin: tighten non-hair reach to ear width (~160px) so background shoulders/people don't leak in,
-        // while letting genuine hair segmentation reach out (~225px) for wide curls/ponytails.
-        const faceEllipse = Math.hypot((x - targetEyesX) / (158 * zoom), (y - (targetEyesY + 12 * zoom)) / (215 * zoom));
+        // Above chin: allow full ear & cheek reach (~192px) so protruding ears/cheeks are never clipped,
+        // while letting genuine hair segmentation reach out (~255px) for wide curls/flowing hair.
+        const faceEllipse = Math.hypot((x - targetEyesX) / (192 * zoom), (y - (targetEyesY + 12 * zoom)) / (225 * zoom));
         const faceHalo = clamp((1.14 - faceEllipse) / 0.16, 0, 1);
-        const hairEllipse = Math.hypot((x - targetEyesX) / (225 * zoom), (y - (targetEyesY - 35 * zoom)) / (270 * zoom));
+        const hairEllipse = Math.hypot((x - targetEyesX) / (255 * zoom), (y - (targetEyesY - 35 * zoom)) / (280 * zoom));
         const hairHalo = clamp((1.16 - hairEllipse) / 0.16, 0, 1);
         const pFg = clamp((personP - 0.4) / 0.26, 0, 1) * faceHalo;
         const hFg = clamp((hairP - 0.38) / 0.26, 0, 1) * hairHalo;
