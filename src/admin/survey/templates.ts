@@ -1,4 +1,5 @@
 import type { SurveyDraft, SurveyQuestion, SurveyType } from '../../../shared/survey';
+import { DEFAULT_APP_NAME } from '../../../shared/constants';
 import { defaultSurveyQuestion } from '../../../shared/survey';
 
 const q = (type: SurveyType, patch: Partial<SurveyQuestion>): SurveyQuestion => ({ ...defaultSurveyQuestion(type), ...patch });
@@ -126,3 +127,18 @@ export const QUICK_PULSE: SurveyDraft = {
 };
 
 export const SURVEY_TEMPLATES = [CORPFUN_REVIEW, QUICK_PULSE];
+
+export function surveyTemplates(appName = DEFAULT_APP_NAME): SurveyDraft[] {
+  const label = appName.trim() || DEFAULT_APP_NAME;
+  if (label === DEFAULT_APP_NAME) return SURVEY_TEMPLATES;
+  const sub = (s: string) => s.replaceAll('CorpFun Day', label);
+  return [
+    {
+      ...CORPFUN_REVIEW,
+      title: sub(CORPFUN_REVIEW.title),
+      intro: sub(CORPFUN_REVIEW.intro),
+      questions: CORPFUN_REVIEW.questions.map((x) => ({ ...x, text: sub(x.text) })),
+    },
+    QUICK_PULSE,
+  ];
+}

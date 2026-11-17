@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { SPLASH_MS } from '../../shared/constants';
+import { useGame } from '../lib/client';
 import PartyShow from '../components/PartyShow';
 import { keepScreenOn } from '../lib/wakelock';
 
@@ -14,6 +15,8 @@ function seenThisTab() {
 }
 
 export default function Splash({ onEnter }: { onEnter: () => void }) {
+  const leaders = useGame((s) => s.branding.leaders);
+  const hasBand = leaders === null || leaders.length > 0;
   const [ready, setReady] = useState(false);
   const [skipWait] = useState(seenThisTab); // a reload in the same tab shows the Enter button right away
   const duration = skipWait ? 0 : SPLASH_MS;
@@ -34,7 +37,7 @@ export default function Splash({ onEnter }: { onEnter: () => void }) {
         <div className="splash-progress absolute bottom-0 left-0 h-1.5 w-full bg-white/60" style={{ animationDuration: `${duration}ms` }} />
       )}
       {ready && (
-        <div className="above-band absolute inset-x-0 z-10 flex justify-center">
+        <div className={`${hasBand ? 'above-band' : 'bottom-[max(1.5rem,env(safe-area-inset-bottom))]'} absolute inset-x-0 z-10 flex justify-center`}>
           <div className="animate-pop">
             <button
               type="button"

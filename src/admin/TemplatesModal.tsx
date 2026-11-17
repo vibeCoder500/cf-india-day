@@ -1,30 +1,33 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Question } from '../../shared/protocol';
 import { TYPE_INFO } from '../../shared/constants';
-import { client } from '../lib/client';
+import { client, useGame } from '../lib/client';
 import Button from '../components/Button';
 import Modal from '../components/Modal';
-import { ANIMAL_PACK, STARTER_PACK } from './templates';
-
-const PACKS = [
-  { label: '📚 Starter pack', blurb: 'India/townhall icebreakers. Add them all or pick a few, then swap in your own team questions.', questions: STARTER_PACK },
-  {
-    label: '🐾 Spirit animals',
-    blurb: 'Phones show the animal cards; every pick floats up as a bubble on the big screen. Edit the text or the animals after adding.',
-    questions: ANIMAL_PACK,
-  },
-];
+import { ANIMAL_PACK, starterPack } from './templates';
 
 export default function TemplatesModal({ eventId, eventName, onClose }: { eventId: string; eventName: string; onClose: () => void }) {
+  const appName = useGame((s) => s.branding.appName);
+  const packs = useMemo(
+    () => [
+      { label: '📚 Starter pack', blurb: 'India/townhall icebreakers. Add them all or pick a few, then swap in your own team questions.', questions: starterPack(appName) },
+      {
+        label: '🐾 Spirit animals',
+        blurb: 'Phones show the animal cards; every pick floats up as a bubble on the big screen. Edit the text or the animals after adding.',
+        questions: ANIMAL_PACK,
+      },
+    ],
+    [appName],
+  );
   const [pack, setPack] = useState(0);
   const [added, setAdded] = useState<string[]>([]);
   const add = (questions: Question[]) => client.send({ t: 'q:import', questions, replace: false, eventId });
-  const { blurb, questions } = PACKS[pack];
+  const { blurb, questions } = packs[pack];
 
   return (
     <Modal title={`📚 Templates → ${eventName}`} onClose={onClose} wide>
       <div className="mb-3 flex flex-wrap gap-2" role="tablist" aria-label="Question packs">
-        {PACKS.map((p, i) => (
+        {packs.map((p, i) => (
           <button
             key={p.label}
             type="button"

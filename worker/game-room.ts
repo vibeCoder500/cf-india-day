@@ -1,11 +1,11 @@
 import { DurableObject } from 'cloudflare:workers';
 import type {
-  AdminMsg, AdminPlayer, AnimalPick, AnswerValue, Asked, ClientMsg, ErrorCode, EventInfo, GameState, LeaderRow, LiveMsg, Me, ModItem,
+  AdminMsg, AdminPlayer, AnimalPick, AnswerValue, Asked, Branding, ClientMsg, ErrorCode, EventInfo, GameState, LeaderRow, LiveMsg, Me, ModItem,
   Question, Results, ServerMsg, ViewMsg,
 } from '../shared/protocol';
-import { AVATARS, DEFAULT_ADMIN_SUFFIX, FLUSH_MS, FORMATS, GRACE_MS, LIMITS, REACTIONS } from '../shared/constants';
+import { AVATARS, DEFAULT_ADMIN_SUFFIX, DEFAULT_BRANDING, FLUSH_MS, FORMATS, GRACE_MS, LIMITS, REACTIONS, mediaUrl } from '../shared/constants';
 import { isSurveyClientMsg } from '../shared/survey';
-import { clean, len, parseAnswer, parseName, parseQuestion } from './validate';
+import { MEDIA_ID_RE, clean, len, parseAnswer, parseBranding, parseName, parseQuestion } from './validate';
 import { Surveys } from './surveys';
 
 type Att = { kind: 'anon'; joins: number } | { kind: 'player'; pid: string } | { kind: 'admin'; token: string; name: string };
@@ -40,6 +40,11 @@ type PlayerRow = {
   score: number; streak: number; kicked: number; joined_at: number;
 };
 type AnswerRow = { id: number; pid: string; ref: string; value: string; at: number; elapsed: number; points: number; hidden: number };
+type MediaRow = { mime: string; data: ArrayBuffer };
+
+const ALLOWED_MEDIA_MIMES = new Set(['image/webp', 'image/png', 'image/jpeg']);
+const STALE_MEDIA_MS = 30 * 60_000;
+const MAX_MEDIA_ROWS = 120;
 
 const SCHEMA = [
   'CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)',
@@ -48,6 +53,7 @@ const SCHEMA = [
   'CREATE TABLE IF NOT EXISTS questions (id TEXT PRIMARY KEY, pos INTEGER NOT NULL, data TEXT NOT NULL)',
   'CREATE TABLE IF NOT EXISTS answers (id INTEGER PRIMARY KEY, qid TEXT NOT NULL, pid TEXT NOT NULL, ref TEXT NOT NULL, value TEXT NOT NULL, at INTEGER NOT NULL, elapsed INTEGER NOT NULL, points INTEGER NOT NULL DEFAULT 0, hidden INTEGER NOT NULL DEFAULT 0)',
   'CREATE INDEX IF NOT EXISTS answers_qid ON answers (qid)',
+  'CREATE TABLE IF NOT EXISTS media (id TEXT PRIMARY KEY, mime TEXT NOT NULL, data BLOB NOT NULL, created_at INTEGER NOT NULL)',
 ];
 
 const NUMBER_PRIZES = [1000, 750, 500];
@@ -77,6 +83,7 @@ function quizPoints(elapsedMs: number, timerSec: number, multiplier: number, str
 export class GameRoom extends DurableObject<Env> {
   private sql: SqlStorage;
   private game: GameState;
+  private branding: Branding;
   private questions: Question[];
   private events: EventInfo[];
   private asked: Record<string, Asked>;
@@ -99,6 +106,7 @@ export class GameRoom extends DurableObject<Env> {
     this.sql = ctx.storage.sql;
     for (const s of SCHEMA) this.sql.exec(s);
     this.game = this.meta<GameState>('game') ?? freshGame();
+    this.branding = this.meta<Branding>('branding') ?? DEFAULT_BRANDING;
     this.asked = this.meta<Record<string, Asked>>('asked') ?? {};
     this.winners = this.meta<string[]>('winners') ?? [];
     this.questions = this.sql
@@ -124,14 +132,28 @@ export class GameRoom extends DurableObject<Env> {
   }
 
   async fetch(request: Request): Promise<Response> {
-    const token = new URL(request.url).searchParams.get('t') ?? '';
+    const url = new URL(request.url);
+    if (url.pathname === '/api/branding' && request.method === 'GET') {
+      return Response.json(this.branding);
+    }
+    if (url.pathname === '/api/media' && request.method === 'POST') {
+      return this.uploadMedia(request, url);
+    }
+    if (url.pathname.startsWith('/api/media/') && (request.method === 'GET' || request.method === 'HEAD')) {
+      return this.serveMedia(url.pathname.slice('/api/media/'.length), request.method === 'HEAD');
+    }
+
+    const token = url.searchParams.get('t') ?? '';
     const [client, server] = Object.values(new WebSocketPair());
     this.ctx.acceptWebSocket(server);
     const att = this.resume(token);
     server.serializeAttachment(att ?? { kind: 'anon', joins: 0 });
     if (att) this.welcome(server, att);
     else if (token) this.fail(server, this.byToken.has(token) ? 'KICKED' : 'SESSION_INVALID', 'Please join again');
-    if (!att) this.surveys.helloPublic(server); // the survey site answers the live survey without logging in
+    if (!att) {
+      this.send(server, { t: 'branding', now: Date.now(), branding: this.branding });
+      this.surveys.helloPublic(server); // the survey site answers the live survey without logging in
+    }
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -247,6 +269,7 @@ export class GameRoom extends DurableObject<Env> {
   }
 
   private welcome(ws: WebSocket, att: Att) {
+    this.send(ws, { t: 'branding', now: Date.now(), branding: this.branding });
     if (att.kind === 'admin') {
       this.send(ws, { t: 'welcome', token: att.token, role: 'admin', id: 'host', name: att.name, avatar: '🎤' });
       this.raw(ws, this.adminMsg(true));
@@ -448,6 +471,10 @@ export class GameRoom extends DurableObject<Env> {
         for (const { ws, att } of this.conns()) if (att?.kind === 'admin') this.raw(ws, s);
         return;
       }
+      case 'branding:save':
+        return this.saveBranding(ws, msg.branding);
+      case 'branding:reset':
+        return this.resetBranding();
       case 'reset':
         return this.reset(msg.scope);
       default:
@@ -800,9 +827,10 @@ export class GameRoom extends DurableObject<Env> {
     if (scope !== 'answers' && scope !== 'players' && scope !== 'wipe') return;
     await this.ctx.storage.deleteAlarm();
     if (scope === 'wipe') {
-      // Game data only. Surveys live in their own tables and are run from /surveyAdmin, so a game wipe keeps them.
+      // Game data only. Branding and surveys are preserved so resetting after a dry run keeps portal customization.
       this.ctx.storage.transactionSync(() => {
-        for (const table of ['meta', 'players', 'admins', 'questions', 'answers']) this.sql.exec(`DELETE FROM ${table}`);
+        this.sql.exec("DELETE FROM meta WHERE k != 'branding'");
+        for (const table of ['players', 'admins', 'questions', 'answers']) this.sql.exec(`DELETE FROM ${table}`);
       });
       this.questions = [];
       this.admins.clear();
@@ -1125,6 +1153,103 @@ export class GameRoom extends DurableObject<Env> {
 
   private saveGame() {
     this.setMeta('game', this.game);
+  }
+
+  // ---------- branding + media ----------
+
+  private async uploadMedia(request: Request, url: URL): Promise<Response> {
+    const auth = request.headers.get('Authorization') ?? '';
+    const bearer = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
+    const token = bearer || (url.searchParams.get('t') ?? '');
+    if (!token || !this.admins.has(token)) {
+      return Response.json({ error: 'Host sign-in required' }, { status: 401 });
+    }
+    const mime = (request.headers.get('Content-Type') ?? '').split(';')[0].trim().toLowerCase();
+    if (!ALLOWED_MEDIA_MIMES.has(mime)) {
+      return Response.json({ error: 'Unsupported image format (use WebP, PNG, or JPEG)' }, { status: 415 });
+    }
+    const buf = await request.arrayBuffer();
+    if (buf.byteLength === 0 || buf.byteLength > LIMITS.mediaBytes) {
+      return Response.json({ error: 'Image must be under 1.5 MB' }, { status: 413 });
+    }
+    this.pruneMedia();
+    const count = this.sql.exec<{ n: number }>('SELECT COUNT(*) AS n FROM media').one().n;
+    if (count >= MAX_MEDIA_ROWS) {
+      return Response.json({ error: 'Too many uploaded images — save or remove old images first' }, { status: 429 });
+    }
+    const id = randomId();
+    this.sql.exec('INSERT INTO media (id, mime, data, created_at) VALUES (?, ?, ?, ?)', id, mime, buf, Date.now());
+    return Response.json({ id, url: mediaUrl(id) });
+  }
+
+  private serveMedia(id: string, headOnly: boolean): Response {
+    if (!MEDIA_ID_RE.test(id)) return new Response('Not found', { status: 404 });
+    const row = this.sql.exec<MediaRow>('SELECT mime, data FROM media WHERE id = ?', id).toArray()[0];
+    if (!row) return new Response('Not found', { status: 404 });
+    return new Response(headOnly ? null : row.data, {
+      headers: {
+        'Content-Type': row.mime,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
+  }
+
+  private hasMedia(id: string): boolean {
+    return this.sql.exec<{ id: string }>('SELECT id FROM media WHERE id = ?', id).toArray().length > 0;
+  }
+
+  private mediaIdsOf(b: Branding): Set<string> {
+    const ids = new Set<string>();
+    for (const p of b.photos ?? []) ids.add(p.id);
+    for (const l of b.leaders ?? []) {
+      ids.add(l.frontId);
+      ids.add(l.backId);
+    }
+    return ids;
+  }
+
+  private pruneMedia(removed: Iterable<string> = []) {
+    const keep = this.mediaIdsOf(this.branding);
+    for (const id of removed) {
+      if (!keep.has(id)) this.sql.exec('DELETE FROM media WHERE id = ?', id);
+    }
+    const cutoff = Date.now() - STALE_MEDIA_MS;
+    const stale = this.sql.exec<{ id: string }>('SELECT id FROM media WHERE created_at < ?', cutoff).toArray();
+    for (const { id } of stale) {
+      if (!keep.has(id)) this.sql.exec('DELETE FROM media WHERE id = ?', id);
+    }
+  }
+
+  private broadcastBranding() {
+    const s = JSON.stringify({ t: 'branding', now: Date.now(), branding: this.branding } satisfies ServerMsg);
+    for (const { ws } of this.conns()) this.raw(ws, s);
+  }
+
+  private saveBranding(ws: WebSocket, raw: unknown) {
+    const parsed = parseBranding(raw, (id) => this.hasMedia(id));
+    if (!parsed) return this.fail(ws, 'BAD_REQUEST', 'Please check the branding details — something is missing or invalid');
+    if (parsed.leaders) {
+      const used = new Set<string>();
+      parsed.leaders = parsed.leaders.map((l) => {
+        const id = l.id && !used.has(l.id) ? l.id : randomId();
+        used.add(id);
+        return { ...l, id };
+      });
+    }
+    const prevIds = this.mediaIdsOf(this.branding);
+    this.branding = parsed;
+    this.setMeta('branding', this.branding);
+    this.pruneMedia(prevIds);
+    this.broadcastBranding();
+  }
+
+  private resetBranding() {
+    const prevIds = this.mediaIdsOf(this.branding);
+    this.branding = DEFAULT_BRANDING;
+    this.sql.exec("DELETE FROM meta WHERE k = 'branding'");
+    this.pruneMedia(prevIds);
+    this.broadcastBranding();
   }
 
   private send(ws: WebSocket, m: ServerMsg) {

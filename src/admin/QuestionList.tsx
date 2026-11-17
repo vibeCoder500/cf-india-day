@@ -2,14 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { AdminState, Question } from '../../shared/protocol';
 import { TYPE_INFO, defaultQuestion } from '../../shared/constants';
-import { client } from '../lib/client';
+import { client, useGame } from '../lib/client';
 import Button from '../components/Button';
 import ImportExport from './ImportExport';
 import QuestionEditor from './QuestionEditor';
 import TemplatesModal from './TemplatesModal';
-import { ANIMAL_PACK, STARTER_PACK } from './templates';
+import { ANIMAL_PACK, starterPack } from './templates';
 
 export default function QuestionList({ admin, eventId, onSelectEvent }: { admin: AdminState; eventId: string; onSelectEvent: (id: string) => void }) {
+  const appName = useGame((s) => s.branding.appName);
   const { questions, asked, game, events } = admin;
   const [editing, setEditing] = useState<Question | null>(null);
   const [templates, setTemplates] = useState(false);
@@ -115,8 +116,8 @@ export default function QuestionList({ admin, eventId, onSelectEvent }: { admin:
         <div className="flex flex-col items-center gap-4 rounded-2xl bg-white/5 p-8 text-center">
           <p className="text-lg opacity-80">No questions in “{eventName}” yet</p>
           <div className="flex flex-wrap justify-center gap-2">
-            <Button big variant="primary" onClick={() => addPack(STARTER_PACK)}>
-              Add starter pack ({STARTER_PACK.length})
+            <Button big variant="primary" onClick={() => addPack(starterPack(appName))}>
+              Add starter pack ({starterPack(appName).length})
             </Button>
             <Button big variant="primary" onClick={() => addPack(ANIMAL_PACK)}>
               Add spirit animal pack ({ANIMAL_PACK.length})

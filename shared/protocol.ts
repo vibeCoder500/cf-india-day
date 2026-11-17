@@ -37,6 +37,28 @@ export interface EventInfo {
   name: string;
 }
 
+export type Costume = 'rockstar' | 'chef' | 'wizard' | 'captain' | 'hero' | 'viking';
+
+export interface TeamPhoto {
+  id: string; // media id served at /api/media/<id>
+}
+
+export interface CustomLeader {
+  id: string;
+  name: string;
+  costume: Costume;
+  frontId: string; // media id for 660x780 front caricature head WebP
+  backId: string; // media id for 660x780 back silhouette WebP
+  handColor: string; // #rrggbb skin tone for cartoon hands
+}
+
+export interface Branding {
+  appName: string;
+  splashText: string;
+  photos: TeamPhoto[] | null; // null = built-in collage photos; [] = none; [...items] = custom team photos
+  leaders: CustomLeader[] | null; // null = built-in 6 leaders; [] = none; [...items] = custom leader caricatures
+}
+
 export interface Draw {
   winnerId: string;
   name: string;
@@ -171,6 +193,7 @@ export type AdminState = Omit<AdminMsg, 'questions' | 'events' | 'asked' | 'play
 
 export type ServerMsg =
   | { t: 'welcome'; token: string; role: 'player' | 'admin'; id: string; name: string; avatar: string }
+  | { t: 'branding'; now: number; branding: Branding }
   | ViewMsg
   | LiveMsg
   | AdminMsg
@@ -212,6 +235,8 @@ export type ClientMsg =
   | { t: 'draw' }
   | { t: 'draw:clear' }
   | { t: 'celebrate' }
+  | { t: 'branding:save'; branding: Branding }
+  | { t: 'branding:reset' }
   | { t: 'reset'; scope: 'answers' | 'players' | 'wipe' }
   // survey mode (players: check/submit; hosts: everything else)
   | SurveyClientMsg;

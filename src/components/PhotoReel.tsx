@@ -1,10 +1,13 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
+import type { TeamPhoto } from '../../shared/protocol';
+import { mediaUrl } from '../../shared/constants';
+import { useGame } from '../lib/client';
 import { calm } from '../lib/fun';
 import { BEAT_MS, nextBeatAt, onMusicChange } from '../lib/music';
 
-// Every photo in src/assets/collage, in file-name order. Add or remove files there to change the reel.
-const PHOTOS = Object.values(
+// Default photos in src/assets/collage, in file-name order.
+export const DEFAULT_PHOTOS: readonly string[] = Object.values(
   import.meta.glob<string>('../assets/collage/*.{jpg,jpeg,png,webp,avif}', { eager: true, import: 'default' }),
 );
 
@@ -129,7 +132,21 @@ function fit(w: number, h: number, n: number, tw: number, th: number): Layout {
 // inside out). Motion: spin with surges, rocking tilt, rolling axis, breathing radius, a travelling wave, sway and nod,
 // flips, beat thumps, glints, slow zooms inside each photo and a drifting camera. The stage clips, so nothing ever
 // reaches the band below.
-export default function PhotoReel({ big = false, children }: { big?: boolean; children: ReactNode }) {
+export default function PhotoReel({
+  big = false,
+  photos,
+  hasBand = true,
+  children,
+}: {
+  big?: boolean;
+  photos?: TeamPhoto[] | null;
+  hasBand?: boolean;
+  children: ReactNode;
+}) {
+  const savedPhotos = useGame((s) => s.branding.photos);
+  const active = photos !== undefined ? photos : savedPhotos;
+  const list = useMemo(() => (active === null ? DEFAULT_PHOTOS : active.map((p) => mediaUrl(p.id))), [active]);
+  const listKey = list.join('|');
   const stageRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -171,7 +188,8 @@ export default function PhotoReel({ big = false, children }: { big?: boolean; ch
       const kick = 1 + KICK * Math.exp(-since / 110);
       const ox = cx + DRIFT * r * Math.sin((TAU * t) / 13.7);
       const oy = cy + (DRIFT * r + float) * Math.sin((TAU * t) / 9.1 + 1.3);
-      text.style.transform = `translate(${ox.toFixed(1)}px, ${(oy + ty).toFixed(1)}px)`;
+      text.style.transform = `translate(${ox.toFixed(1)}px, ${(oy + (n === 0 ? 0 : ty)).toFixed(1)}px)`;
+      if (n === 0) return;
 
       // Now and then a photo off to one side somersaults; the one passing the front is left alone to be looked at.
       if (t > nextFlip) {
@@ -253,12 +271,12 @@ export default function PhotoReel({ big = false, children }: { big?: boolean; ch
       ro.disconnect();
       off();
     };
-  }, []);
+  }, [listKey]);
 
   return (
-    <div ref={stageRef} className={`reel ${big ? 'reel-big' : ''}`}>
-      {PHOTOS.map((src, i) => (
-        <div key={src} className="reel-card" aria-hidden>
+    <div ref={stageRef} className={`reel ${big ? 'reel-big' : ''} ${hasBand ? '' : 'reel-noband'}`}>
+      {list.map((src, i) => (
+        <div key={`${i}:${src}`} className="reel-card" aria-hidden>
           <div className="reel-shot">
             <img
               src={src}

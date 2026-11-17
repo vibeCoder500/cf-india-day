@@ -1,4 +1,7 @@
+import { createContext, useContext } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
+import type { Costume, CustomLeader } from '../../shared/protocol';
+import { COSTUMES, mediaUrl } from '../../shared/constants';
 import captain from '../assets/heads/captain.webp';
 import captainBack from '../assets/heads/captain-back.webp';
 import chef from '../assets/heads/chef.webp';
@@ -12,12 +15,20 @@ import vikingBack from '../assets/heads/viking-back.webp';
 import wizard from '../assets/heads/wizard.webp';
 import wizardBack from '../assets/heads/wizard-back.webp';
 
-// Six of our leaders (they said yes) as bobblehead caricatures: their own photo as the head, on a cartoon body in a
-// funny costume. The photos were cut out, levelled and upscaled offline, never redrawn or reshaped, so everyone is
-// recognisable. Every head file is 660 × 780 px with the face 264 px wide (cheek to cheek) and the point between the
-// eyes at (330, 375), so one placement fits all six. The *-back files are the same outline in hair colour.
-export type Person = 'rockstar' | 'chef' | 'wizard' | 'captain' | 'hero' | 'viking';
-export const PEOPLE: readonly Person[] = ['rockstar', 'chef', 'wizard', 'captain', 'hero', 'viking'];
+// Six default leaders as bobblehead caricatures (or any custom leader photos transformed in the Host Console):
+// each head file is 660 × 780 px with the face 264 px wide (cheek to cheek) and the point between the eyes at
+// (330, 375), so one placement fits every costume. The *-back files are the same outline in hair colour.
+export type Person = Costume;
+export const PEOPLE: readonly Person[] = COSTUMES;
+
+export interface Actor {
+  id: string;
+  name: string;
+  costume: Costume;
+  front: string;
+  back: string;
+  hand: string;
+}
 
 export const INK = '#3b2417';
 const K = 58 / 264; // viewBox units per photo pixel: every face is 58 units wide, a proper bobblehead
@@ -34,20 +45,49 @@ const LOOKS: Record<Person, Look> = {
   viking: { front: viking, back: vikingBack, sleeve: '#3a7d44', hand: '#8f6450' },
 };
 
-let ready: Promise<void> | null = null;
-// Loads and decodes every head once, so nobody ever appears headless for a moment.
-export function headsReady(): Promise<void> {
-  ready ??= Promise.all(
-    Object.values(LOOKS).flatMap(({ front, back }) =>
-      [front, back].map((src) => {
-        const img = new Image();
-        img.src = src;
-        return img.decode().catch(() => undefined);
-      }),
-    ),
-  ).then(() => undefined);
-  return ready;
+export const DEFAULT_ACTORS: readonly Actor[] = PEOPLE.map((who) => ({
+  id: who,
+  name: who,
+  costume: who,
+  front: LOOKS[who].front,
+  back: LOOKS[who].back,
+  hand: LOOKS[who].hand,
+}));
+
+export function actorFromLeader(l: CustomLeader, index = 0): Actor {
+  return {
+    id: l.id || `leader-${index}`,
+    name: l.name,
+    costume: l.costume,
+    front: mediaUrl(l.frontId),
+    back: mediaUrl(l.backId),
+    hand: l.costume === 'hero' ? '#e63946' : l.handColor,
+  };
 }
+
+export function actorsOf(leaders: CustomLeader[] | null | undefined): readonly Actor[] {
+  if (leaders === null || leaders === undefined) return DEFAULT_ACTORS;
+  return leaders.map((l, i) => actorFromLeader(l, i));
+}
+
+const decoded = new Map<string, Promise<void>>();
+function decodeOnce(src: string): Promise<void> {
+  let p = decoded.get(src);
+  if (!p) {
+    const img = new Image();
+    img.src = src;
+    p = img.decode().catch(() => undefined);
+    decoded.set(src, p);
+  }
+  return p;
+}
+
+// Loads and decodes every head once, so nobody ever appears headless for a moment.
+export function headsReady(actors: readonly Actor[] = DEFAULT_ACTORS): Promise<void> {
+  return Promise.all(actors.flatMap(({ front, back }) => [decodeOnce(front), decodeOnce(back)])).then(() => undefined);
+}
+
+const ActorCtx = createContext<{ costume: Costume; sleeve: string; hand: string } | null>(null);
 
 // Pivot for CSS rotations, in viewBox units (SVG's default transform-box).
 export const pivot = (x: number, y: number): CSSProperties => ({ transformOrigin: `${x}px ${y}px` });
@@ -71,10 +111,14 @@ export function Arm({ who, from: [x1, y1], to: [x2, y2], width, className, style
   className?: string;
   style?: CSSProperties;
 }) {
+  const ctx = useContext(ActorCtx);
+  const costume = ctx?.costume ?? who;
+  const sleeve = ctx?.sleeve ?? LOOKS[who].sleeve;
+  const hand = ctx?.hand ?? LOOKS[who].hand;
   return (
     <g className={className} style={style}>
-      <Limb d={`M${x1} ${y1}L${x2} ${y2}`} color={LOOKS[who].sleeve} width={width ?? (who === 'wizard' ? 9 : 7.5)} />
-      <circle cx={x2} cy={y2} r={4} fill={LOOKS[who].hand} strokeWidth={2} />
+      <Limb d={`M${x1} ${y1}L${x2} ${y2}`} color={sleeve} width={width ?? (costume === 'wizard' ? 9 : 7.5)} />
+      <circle cx={x2} cy={y2} r={4} fill={hand} strokeWidth={2} />
     </g>
   );
 }
@@ -327,33 +371,40 @@ function Hat({ who }: { who: Person }) {
 }
 
 // A bobblehead in a 120 × 150 viewBox, seen from the front (or from behind). CSS animates the named parts.
-export default function Caricature({ who, back = false, arms = true, className, children }: {
-  who: Person;
+export default function Caricature({ actor, who, back = false, arms = true, className, children }: {
+  actor?: Actor;
+  who?: Person;
   back?: boolean;
   arms?: boolean; // off when the children draw their own arms (holding an instrument)
   className?: string;
   children?: ReactNode;
 }) {
-  const look = LOOKS[who];
+  const costume: Costume = actor?.costume ?? who ?? 'rockstar';
+  const base = LOOKS[costume];
+  const frontSrc = actor?.front ?? base.front;
+  const backSrc = actor?.back ?? base.back;
+  const hand = costume === 'hero' ? '#e63946' : (actor?.hand ?? base.hand);
   return (
-    <svg viewBox="0 0 120 150" className={`cr-${who} ${className ?? ''}`} aria-hidden>
-      <g className="cr-all" stroke={INK} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-        {!back && <Behind who={who} />}
-        <Legs who={who} />
-        {/* The head goes under the costume, so the collar hides the bottom of the neck however it bobbles. */}
-        <g className="cr-head" style={pivot(60, 104)}>
-          <image href={back ? look.back : look.front} x={HEAD.x} y={HEAD.y} width={HEAD.w} height={HEAD.h} />
-          <Hat who={who} />
+    <ActorCtx.Provider value={{ costume, sleeve: base.sleeve, hand }}>
+      <svg viewBox="0 0 120 150" className={`cr-${costume} ${className ?? ''}`} aria-hidden>
+        <g className="cr-all" stroke={INK} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+          {!back && <Behind who={costume} />}
+          <Legs who={costume} />
+          {/* The head goes under the costume, so the collar hides the bottom of the neck however it bobbles. */}
+          <g className="cr-head" style={pivot(60, 104)}>
+            <image href={back ? backSrc : frontSrc} x={HEAD.x} y={HEAD.y} width={HEAD.w} height={HEAD.h} />
+            <Hat who={costume} />
+          </g>
+          <Torso who={costume} back={back} />
+          {arms && (
+            <>
+              <Arm who={costume} className="cr-arm-l" style={pivot(40, 108)} from={[40, 108]} to={[31, 126]} />
+              <Arm who={costume} className="cr-arm-r" style={pivot(80, 108)} from={[80, 108]} to={[89, 126]} />
+            </>
+          )}
+          {children}
         </g>
-        <Torso who={who} back={back} />
-        {arms && (
-          <>
-            <Arm who={who} className="cr-arm-l" style={pivot(40, 108)} from={[40, 108]} to={[31, 126]} />
-            <Arm who={who} className="cr-arm-r" style={pivot(80, 108)} from={[80, 108]} to={[89, 126]} />
-          </>
-        )}
-        {children}
-      </g>
-    </svg>
+      </svg>
+    </ActorCtx.Provider>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { AdminSurvey, PublicSurvey, SurveyDraft } from '../../../shared/survey';
 import { DAY_MS, SURVEY_GRACE_MS, SURVEY_LIMITS, endOfIstDay, surveyMinutes, surveyStatus } from '../../../shared/survey';
@@ -13,7 +13,7 @@ import ResponseCarousel from './ResponseCarousel';
 import SurveyBuilder from './SurveyBuilder';
 import SurveyResults from './SurveyResults';
 import SurveyShare from './SurveyShare';
-import { SURVEY_TEMPLATES } from './templates';
+import { surveyTemplates } from './templates';
 
 type Status = 'draft' | 'live' | 'closing' | 'closed' | 'finalized';
 type Pop = 'templates' | 'launch' | 'share' | 'preview' | null;
@@ -52,6 +52,8 @@ function Badge({ s, now }: { s: AdminSurvey; now: number }) {
 
 export default function SurveyPanel() {
   const surveys = useGame((st) => st.surveys);
+  const appName = useGame((st) => st.branding.appName);
+  const templates = useMemo(() => surveyTemplates(appName), [appName]);
   const now = useServerNow(5_000);
   const [openId, setOpenId] = useState<string | null>(null);
   const [view, setView] = useState<View>('setup');
@@ -217,8 +219,8 @@ export default function SurveyPanel() {
           {surveys.length === 0 ? (
             <div className="flex flex-col items-center gap-4 rounded-2xl bg-white/5 p-8 text-center">
               <p className="text-lg opacity-80">No surveys yet</p>
-              <Button big variant="primary" onClick={() => create(SURVEY_TEMPLATES[0])}>
-                Start with “{SURVEY_TEMPLATES[0].title}”
+              <Button big variant="primary" onClick={() => create(templates[0])}>
+                Start with “{templates[0].title}”
               </Button>
             </div>
           ) : (
@@ -248,7 +250,7 @@ export default function SurveyPanel() {
       {pop === 'templates' && (
         <Modal title="Survey templates" onClose={() => setPop(null)} wide>
           <div className="flex flex-col gap-3">
-            {SURVEY_TEMPLATES.map((t) => (
+            {templates.map((t) => (
               <div key={t.title} className="flex flex-wrap items-center gap-3 rounded-2xl bg-white/5 p-4">
                 <div className="min-w-0 flex-1">
                   <p className="font-display text-lg font-bold">{t.title}</p>

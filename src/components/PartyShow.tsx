@@ -1,15 +1,31 @@
 import confetti from 'canvas-confetti';
 import { useEffect, useEffectEvent, useRef } from 'react';
+import type { Branding } from '../../shared/protocol';
 import { SPLASH_TEXT } from '../../shared/constants';
+import { useGame } from '../lib/client';
 import { startSplashShow } from '../lib/splashShow';
 import Band from './Band';
 import PhotoReel from './PhotoReel';
 
 const LETTER_COLORS = ['#FF9933', '#FFFFFF', '#22c55e', '#facc15', '#f472b6', '#38bdf8', '#a78bfa'];
 
-// The celebration show: ever-changing confetti, the animal band, and the waving CorpFun Day text with the party photos
-// revolving round it. Used by the splash and the presenter.
-export default function PartyShow({ durationMs, onDone, big = false }: { durationMs: number; onDone: () => void; big?: boolean }) {
+// The celebration show: ever-changing confetti, the leader band, and the waving splash headline with the team photos
+// revolving round it. Used by the splash, the presenter, and the admin customization preview.
+export default function PartyShow({
+  durationMs,
+  onDone,
+  big = false,
+  branding,
+}: {
+  durationMs: number;
+  onDone: () => void;
+  big?: boolean;
+  branding?: Branding;
+}) {
+  const savedBranding = useGame((s) => s.branding);
+  const b = branding ?? savedBranding;
+  const text = b.splashText.trim() || SPLASH_TEXT;
+  const hasBand = b.leaders === null || b.leaders.length > 0;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const done = useEffectEvent(onDone);
 
@@ -23,15 +39,15 @@ export default function PartyShow({ durationMs, onDone, big = false }: { duratio
     };
   }, [durationMs]);
 
-  const words = SPLASH_TEXT.split(' ');
+  const words = text.split(' ');
   let n = 0;
   return (
     <>
       <div className="splash-bg absolute inset-0" />
-      <Band big={big} />
+      <Band big={big} leaders={b.leaders} />
       <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
-      <PhotoReel big={big}>
-        <h1 className={`splash-text font-display ${big ? 'splash-big' : ''}`} aria-label={SPLASH_TEXT}>
+      <PhotoReel big={big} photos={b.photos} hasBand={hasBand}>
+        <h1 className={`splash-text font-display ${big ? 'splash-big' : ''}`} aria-label={text}>
           {words.map((w, wi) => (
             <span key={wi} className="inline-block whitespace-nowrap" aria-hidden>
               {Array.from(w).map((ch) => {

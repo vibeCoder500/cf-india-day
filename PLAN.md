@@ -3209,6 +3209,17 @@ ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name: 'Tester', avatar: '�
 11. Hidden answers are excluded from **all** results; `answered` also counts pending (moderated) entries, which is intentional.
 12. Phones never receive `correct` before the results phase; the server strips it in `viewBase()`.
 13. Custom CSS in `index.css` is unlayered, so it wins over Tailwind utilities. Keep those class names specific (`bounce-x`, `splash-text`, …).
-14. "Remove all players" keeps host sessions; "Wipe everything" logs out everyone, hosts included.
+14. "Remove all players" keeps host sessions; "Wipe everything" logs out everyone, hosts included, while keeping custom branding and surveys.
 15. Only the host's actions change game state. The presenter is read-only, and phones can only join, answer, react, rename and change their avatar.
+
+---
+
+## 23. Portal Branding & AI Caricatures
+
+Hosts can customize the portal for any team directly from the **🎨 Customize** tab in the Host Console:
+
+- **App & Splash Title**: Configure both the short **Event / App Title** (shown on the Presenter Lobby QR screen, browser tab titles, `/survey` header, and starter question/survey templates) and the **Revolving Splash Headline** (the waving multi-colour 3-D text inside the revolving photo ring on phones and the big screen).
+- **Revolving Team Photos**: Upload up to 24 team photos (client-side compressed to WebP and stored in the Durable Object's SQLite `media` table, edge-cached at `/api/media/:id` with immutable headers), reorder or remove them, or restore defaults.
+- **Leadership Caricatures**: Attach 1–12 leader photos (batch upload or single-leader studio). In-browser MediaPipe Tasks Vision (`blaze_face_short_range`, `selfie_segmenter`, `hair_segmenter`, self-hosted under `/mediapipe/*` and lazy-loaded only in the Host Console) levels the head, isolates face + hair (even from group photos), extends a skin-matched neck behind the collar, applies comic caricature stylization and a `#3b2417` sticker outline, and generates a hair-coloured back silhouette for the animated costumes in `Band` and `Zoomies`.
+
 

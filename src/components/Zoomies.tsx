@@ -1,14 +1,15 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { useGame } from '../lib/client';
 import { calm } from '../lib/fun';
 import { isMuted } from '../lib/music';
 import { awake, hop, restAfter, step, track, unlockOnTap, voice, whee, zip } from '../lib/zoomieSounds';
 import type { Sfx } from '../lib/zoomieSounds';
-import Caricature, { PEOPLE, headsReady } from './Caricature';
-import type { Person } from './Caricature';
+import Caricature, { actorsOf, headsReady } from './Caricature';
+import type { Actor } from './Caricature';
 
 type Pt = { x: number; y: number }; // screen px
-type Base = { id: number; who: Person; width: number; delay: number; pitch: number; rank: number };
+type Base = { id: number; actor: Actor; width: number; delay: number; pitch: number; rank: number };
 // Dash: a straight run across the screen between two off-screen points, leaning into it. It's slowest at `mid` (0–1
 // along the run), where it passes its spot in the middle of the screen.
 type Dash = Base & { style: 'dash'; from: Pt; to: Pt; lean: number; mid: number };
@@ -184,11 +185,11 @@ function Runner({ run, onDone }: { run: Run; onDone: () => void }) {
     <div ref={ref} className={`zoomie zoomie-${run.style}`} style={style} aria-hidden>
       {run.style === 'zoom' ? (
         <div className="zoomie-flip">
-          <Caricature who={run.who} className="cr-run" />
-          <Caricature who={run.who} back className="cr-run cr-fast" />
+          <Caricature actor={run.actor} className="cr-run" />
+          <Caricature actor={run.actor} back className="cr-run cr-fast" />
         </div>
       ) : (
-        <Caricature who={run.who} className="cr-run cr-whee" />
+        <Caricature actor={run.actor} className="cr-run cr-whee" />
       )}
     </div>
   );
@@ -206,13 +207,13 @@ function sound(a: Sfx, group: Run[]) {
       const dur = ms / 1000;
       const t = track(a, [0, 0.25, 0.5, 0.75, 1].map((f) => [t0 + f * dur, panOf(lerp(r.from.x, r.to.x, dashAt(r, f * ms)))]));
       for (let s = 0.05; s < dur; s += 0.1) step(t, t0 + s, 0.1 + 0.25 * Math.sin((Math.PI * s) / dur)); // each footfall of the 0.2 s stride
-      voice(t, r.who, t0 + 0.05);
+      voice(t, r.actor.costume, t0 + 0.05);
       end = Math.max(end, whee(t, t0 + 0.4, dur - 0.3, 560 * r.pitch, 1180 * r.pitch, 620 * r.pitch));
     } else if (r.style === 'pop') {
       // A "boing!" up over the edge and a hello, then a swoosh and a "wheee" back out, from that side of the screen.
       const t = track(a, [[t0, r.edge === 'left' ? -0.85 : r.edge === 'right' ? 0.85 : panOf(r.along)]]);
       hop(t, t0, 0.4, 1.15);
-      voice(t, r.who, t0 + POP_IN / 1000);
+      voice(t, r.actor.costume, t0 + POP_IN / 1000);
       const out = t0 + (POP_IN + POP_STAY) / 1000;
       zip(t, out);
       end = Math.max(end, whee(t, out, POP_OUT / 1000 + 0.25, 1250, 1450, 520));
@@ -225,7 +226,7 @@ function sound(a: Sfx, group: Run[]) {
         [away + AWAY_MS / 1000, panOf(r.away)],
       ]);
       for (let i = 0; i < STEPS; i++) hop(t, t0 + (i * STEP_MS) / 1000, 0.06 + 0.4 * (i / (STEPS - 1)) ** 1.5, 1.35 - 0.45 * (i / (STEPS - 1)));
-      voice(t, r.who, t0 + (STEPS * STEP_MS) / 1000 + 0.03);
+      voice(t, r.actor.costume, t0 + (STEPS * STEP_MS) / 1000 + 0.03);
       zip(t, t0 + (TURNED_MS - TURN_MS) / 1000);
       for (let s = 0; s < AWAY_MS / 1000; s += 0.09) step(t, away + s, 0.3 * (1 - (s * 1000) / AWAY_MS) + 0.02);
       end = Math.max(end, whee(t, away, AWAY_MS / 1000 + 0.3, 950 * r.pitch, 1350 * r.pitch, 480 * r.pitch));
@@ -240,14 +241,16 @@ let seq = 0;
 // before anyone else looks. Each phone picks its own moments and directions, so nobody else sees the same one.
 // The gap after the previous runners have gone is minGapMs–maxGapMs; `pops` adds the pop-in from any edge.
 export default function Zoomies({ minGapMs = 16_000, maxGapMs = 60_000, pops = false }: { minGapMs?: number; maxGapMs?: number; pops?: boolean }) {
+  const savedLeaders = useGame((s) => s.branding.leaders);
+  const actors = useMemo(() => actorsOf(savedLeaders), [savedLeaders]);
   const [runs, setRuns] = useState<Run[]>([]);
 
   useEffect(() => {
-    if (calm()) return;
-    void headsReady(); // fetched now, so the first run (seconds away) never starts headless
+    if (calm() || actors.length === 0) return;
+    void headsReady(actors); // fetched now, so the first run (seconds away) never starts headless
     const stopUnlock = unlockOnTap();
     let live = true;
-    let last: Person | undefined;
+    let lastId: string | undefined;
     let lastEdge: Edge | undefined;
     let heading = Math.random() * 2 * Math.PI;
     let timer: ReturnType<typeof setTimeout>;
@@ -259,11 +262,10 @@ export default function Zoomies({ minGapMs = 16_000, maxGapMs = 60_000, pops = f
       if (document.hidden) return later();
       const roll = Math.random();
       const style = pops && roll < 0.4 ? 'pop' : roll < (pops ? 0.75 : 0.5) ? 'dash' : 'zoom';
-      const count = style === 'pop' ? 1 : Math.random() < 0.55 ? 1 : Math.random() < 0.67 ? 2 : 3;
-      const kinds = PEOPLE.filter((s) => s !== last)
-        .sort(() => Math.random() - 0.5)
-        .slice(0, count);
-      last = kinds.at(-1);
+      const count = style === 'pop' ? 1 : Math.min(actors.length, Math.random() < 0.55 ? 1 : Math.random() < 0.67 ? 2 : 3);
+      const pool = actors.length > count ? actors.filter((a) => a.id !== lastId) : [...actors];
+      const kinds = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
+      lastId = kinds.at(-1)?.id;
       const [W, H] = [innerWidth, innerHeight];
       const lanes = kinds.map((_, i) => i - (count - 1) / 2);
       let group: Run[];
@@ -276,7 +278,7 @@ export default function Zoomies({ minGapMs = 16_000, maxGapMs = 60_000, pops = f
         const span = edge === 'top' || edge === 'bottom' ? W : H;
         const pad = width * 0.6;
         const along = pad + Math.random() * Math.max(0, span - 2 * pad);
-        group = [{ id: ++seq, who: kinds[0], width, pitch: 1, rank: 0, delay: 0, style: 'pop', edge, along }];
+        group = [{ id: ++seq, actor: kinds[0], width, pitch: 1, rank: 0, delay: 0, style: 'pop', edge, along }];
       } else if (style === 'dash') {
         // Any direction (top, bottom, either side or a corner), and never close to the last one.
         heading += ((60 + Math.random() * 240) * Math.PI) / 180;
@@ -284,12 +286,12 @@ export default function Zoomies({ minGapMs = 16_000, maxGapMs = 60_000, pops = f
         const width = Math.min(0.36 * W, 0.26 * H);
         const margin = width * 1.4; // fully off screen, speed lines included
         const centre = { x: W * (0.3 + Math.random() * 0.4), y: H * (0.25 + Math.random() * 0.5) };
-        group = kinds.map((who, i): Dash => {
+        group = kinds.map((actor, i): Dash => {
           const p = { x: centre.x - dy * lanes[i] * width, y: centre.y + dx * lanes[i] * width };
           const back = reach(p, -dx, -dy, margin);
           const ahead = reach(p, dx, dy, margin);
           return {
-            id: ++seq, who, width, pitch: CHORD[i], rank: i, delay: i * 330 + Math.random() * 80, style: 'dash',
+            id: ++seq, actor, width, pitch: CHORD[i], rank: i, delay: i * 330 + Math.random() * 80, style: 'dash',
             from: { x: p.x - dx * back, y: p.y - dy * back },
             to: { x: p.x + dx * ahead, y: p.y + dy * ahead },
             lean: dx * 14,
@@ -301,9 +303,9 @@ export default function Zoomies({ minGapMs = 16_000, maxGapMs = 60_000, pops = f
         const width = Math.min(0.52 * W, 0.4 * H) * [1, 0.8, 0.66][count - 1];
         const spot = (lo: number, hi: number) => W * (lo + Math.random() * (hi - lo));
         const [far, near, away] = [spot(0.15, 0.85), spot(0.3, 0.7), spot(0.1, 0.9)];
-        group = kinds.map((who, i): Zoom => {
+        group = kinds.map((actor, i): Zoom => {
           const lane = lanes[i] * 0.26 * W;
-          return { id: ++seq, who, width, pitch: CHORD[i], rank: i, delay: i * 280 + Math.random() * 80, style: 'zoom', far: far + lane, near: near + lane, away: away + lane };
+          return { id: ++seq, actor, width, pitch: CHORD[i], rank: i, delay: i * 280 + Math.random() * 80, style: 'zoom', far: far + lane, near: near + lane, away: away + lane };
         });
       }
       // Waking the audio can take a moment; the runners wait for it so their sounds start with the motion.
@@ -324,7 +326,7 @@ export default function Zoomies({ minGapMs = 16_000, maxGapMs = 60_000, pops = f
       clearTimeout(timer);
       stopUnlock();
     };
-  }, [minGapMs, maxGapMs, pops]);
+  }, [actors, minGapMs, maxGapMs, pops]);
 
   return (
     <>

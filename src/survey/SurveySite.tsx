@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react';
 import type { CSSProperties } from 'react';
-import { SURVEY_ROUTE } from '../lib/client';
+import { SURVEY_ROUTE, useGame } from '../lib/client';
 import Zoomies from '../components/Zoomies';
 import SurveyRespond from './SurveyRespond';
 
@@ -17,9 +17,10 @@ const ORBS: Record<string, string>[] = [
 // The survey site: /survey (anyone answers, no login) and /surveyAdmin (hosts run surveys). No game, no presenter.
 export default function SurveySite() {
   const studio = SURVEY_ROUTE === 'admin';
+  const appName = useGame((s) => s.branding.appName);
   useEffect(() => {
-    document.title = studio ? 'Survey studio · CorpFun Day' : 'Feedback · CorpFun Day 📝';
-  }, [studio]);
+    document.title = studio ? `Survey studio · ${appName}` : `Feedback · ${appName} 📝`;
+  }, [studio, appName]);
   return (
     <div className="survey-site">
       <div className="glass-bg" aria-hidden>

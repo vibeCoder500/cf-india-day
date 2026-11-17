@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import type { Costume, CustomLeader } from '../../shared/protocol';
+import { useGame } from '../lib/client';
 import { BEAT_MS, nextBeatAt, onMusicChange } from '../lib/music';
-import Caricature, { Arm, INK, Limb, headsReady, pivot, star } from './Caricature';
-import type { Person } from './Caricature';
+import Caricature, { Arm, INK, Limb, actorsOf, headsReady, pivot, star } from './Caricature';
 
 const WOOD = '#7a4a26';
 
@@ -146,28 +147,31 @@ function Accordion() {
   );
 }
 
-const MEMBERS: { who: Person; gear: ReactNode; notes: [x: number, y: number][]; glyphs?: [string, string] }[] = [
-  { who: 'rockstar', gear: <Guitar />, notes: [[10, 52], [90, 30]] },
-  { who: 'chef', gear: <Pot />, notes: [[8, 44], [92, 50]] },
-  { who: 'wizard', gear: <Wand />, notes: [[92, 46], [84, 26]], glyphs: ['✨', '✨'] },
-  { who: 'captain', gear: <Accordion />, notes: [[6, 40], [94, 36]] },
-  { who: 'hero', gear: <Keys />, notes: [[8, 52], [92, 44]] },
-  { who: 'viking', gear: <Maracas />, notes: [[10, 30], [90, 32]] },
-];
+const INSTRUMENTS: Record<Costume, { gear: ReactNode; notes: [x: number, y: number][]; glyphs?: [string, string] }> = {
+  rockstar: { gear: <Guitar />, notes: [[10, 52], [90, 30]] },
+  chef: { gear: <Pot />, notes: [[8, 44], [92, 50]] },
+  wizard: { gear: <Wand />, notes: [[92, 46], [84, 26]], glyphs: ['✨', '✨'] },
+  captain: { gear: <Accordion />, notes: [[6, 40], [94, 36]] },
+  hero: { gear: <Keys />, notes: [[8, 52], [92, 44]] },
+  viking: { gear: <Maracas />, notes: [[10, 30], [90, 32]] },
+};
 const NOTE_COLORS = ['#ffffff', '#ffd23f', '#ff8fab', '#7dd3fc'];
 
-// The splash's house band: six leaders, as bobblehead caricatures, jamming to the party music.
-export default function Band({ big = false }: { big?: boolean }) {
+// The splash's house band: leaders as bobblehead caricatures, jamming to the party music.
+export default function Band({ big = false, leaders }: { big?: boolean; leaders?: CustomLeader[] | null }) {
+  const savedLeaders = useGame((s) => s.branding.leaders);
+  const actors = useMemo(() => actorsOf(leaders !== undefined ? leaders : savedLeaders), [leaders, savedLeaders]);
   const ref = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(false);
 
   useEffect(() => {
     let live = true;
-    void headsReady().then(() => live && setShown(true));
+    setShown(false);
+    void headsReady(actors).then(() => live && setShown(true));
     return () => {
       live = false;
     };
-  }, []);
+  }, [actors]);
 
   // Every dance loop lasts whole beats (or halves), so starting them all on a beat puts the band in time with the music.
   useEffect(() => {
@@ -178,26 +182,38 @@ export default function Band({ big = false }: { big?: boolean }) {
     };
     sync();
     return onMusicChange(sync);
-  }, []);
+  }, [actors]);
+
+  if (actors.length === 0) return null;
+
+  const cols = Math.max(6, actors.length);
 
   return (
-    <div ref={ref} className={`band ${big ? 'band-big' : ''} ${shown ? '' : 'band-wait'}`} aria-hidden>
-      {MEMBERS.map((m, i) => (
-        <div key={m.who} className={`band-${m.who}`}>
-          <Caricature who={m.who} arms={false}>
-            {m.gear}
-          </Caricature>
-          {m.notes.map(([x, y], n) => (
-            <span
-              key={n}
-              className="band-note"
-              style={{ left: `${x}%`, top: `${y}%`, color: NOTE_COLORS[(i + n) % 4], animationDelay: `calc(var(--beat) * ${-(i * 1.5 + n * 3)})` }}
-            >
-              {m.glyphs?.[n] ?? (n ? '♫' : '♪')}
-            </span>
-          ))}
-        </div>
-      ))}
+    <div
+      ref={ref}
+      className={`band ${big ? 'band-big' : ''} ${shown ? '' : 'band-wait'}`}
+      style={{ gridTemplateColumns: `repeat(${actors.length}, minmax(0, calc(var(--band-w) / ${cols})))`, justifyContent: 'center' }}
+      aria-hidden
+    >
+      {actors.map((actor, i) => {
+        const inst = INSTRUMENTS[actor.costume];
+        return (
+          <div key={actor.id} className={`band-${actor.costume}`}>
+            <Caricature actor={actor} arms={false}>
+              {inst.gear}
+            </Caricature>
+            {inst.notes.map(([x, y], n) => (
+              <span
+                key={n}
+                className="band-note"
+                style={{ left: `${x}%`, top: `${y}%`, color: NOTE_COLORS[(i + n) % 4], animationDelay: `calc(var(--beat) * ${-(i * 1.5 + n * 3)})` }}
+              >
+                {inst.glyphs?.[n] ?? (n ? '♫' : '♪')}
+              </span>
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }

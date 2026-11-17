@@ -1,15 +1,42 @@
-import type { Display, Question, QuestionType } from './protocol';
+import type { Branding, Costume, Display, Question, QuestionType } from './protocol';
 
 export const ROOM_NAME = 'cf-india-day';
 export const DEFAULT_ADMIN_SUFFIX = '_adminControl';
+export const DEFAULT_APP_NAME = 'CorpFun Day';
 export const SPLASH_TEXT = 'Yayyyyyyyy, itssss CorpFun Dayyyy 🥳🤩';
 export const SPLASH_MS = 10_000;
+
+export const COSTUMES: readonly Costume[] = ['rockstar', 'chef', 'wizard', 'captain', 'hero', 'viking'];
+
+export const COSTUME_INFO: Record<Costume, { label: string; emoji: string; prop: string }> = {
+  rockstar: { label: 'Rockstar', emoji: '🎸', prop: 'Electric guitar' },
+  chef: { label: 'Master Chef', emoji: '👨‍🍳', prop: 'Cooking pot & spoons' },
+  wizard: { label: 'Wizard', emoji: '🧙', prop: 'Magic star wand' },
+  captain: { label: 'Pirate Captain', emoji: '🏴‍☠️', prop: 'Parrot & accordion' },
+  hero: { label: 'Superhero', emoji: '🦸', prop: 'Cape & synth keys' },
+  viking: { label: 'Viking', emoji: '⚔️', prop: 'Horned helm & maracas' },
+};
+
+export const DEFAULT_BRANDING: Branding = {
+  appName: DEFAULT_APP_NAME,
+  splashText: SPLASH_TEXT,
+  photos: null,
+  leaders: null,
+};
+
+export const mediaUrl = (id: string) => `/api/media/${id}`;
 
 export const LIMITS = {
   players: 1500,
   questions: 150, // across all events
   events: 20,
   eventName: 40,
+  appName: 60,
+  splashText: 100,
+  photos: 24,
+  leaders: 12,
+  leaderName: 40,
+  mediaBytes: 1_500_000,
   nameMin: 2,
   nameMax: 20,
   question: 200,

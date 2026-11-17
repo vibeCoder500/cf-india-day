@@ -1,17 +1,20 @@
 import { QRCodeSVG } from 'qrcode.react';
 import { motion } from 'motion/react';
 import type { AdminState } from '../../shared/protocol';
+import { useGame } from '../lib/client';
 import CountUp from './CountUp';
 
 const SHOWN = 60;
 
 export default function LobbyScreen({ admin }: { admin: AdminState }) {
+  const appName = useGame((s) => s.branding.appName);
+  const hasEmoji = /\p{Extended_Pictographic}\s*$/u.test(appName);
   const latest = [...admin.players].sort((a, b) => b.joinedAt - a.joinedAt);
   return (
     <div className="grid h-full grid-cols-2 gap-[4vw] p-[4vw]">
       <div className="flex flex-col items-center justify-center gap-[2vh] text-center">
-        <h1 className="font-display text-[clamp(3rem,6vw,6rem)] leading-none font-extrabold">
-          CorpFun Day <span className="inline-block animate-wiggle">🥳</span>
+        <h1 className="font-display text-[clamp(2.5rem,5.5vw,5.5rem)] leading-tight font-extrabold">
+          {appName} {!hasEmoji && <span className="inline-block animate-wiggle">🥳</span>}
         </h1>
         <p className="text-[clamp(1.5rem,2.5vw,2.75rem)] font-bold opacity-90">Scan to join</p>
         <div className="rounded-3xl bg-white p-[2vh] shadow-2xl">

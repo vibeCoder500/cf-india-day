@@ -1,5 +1,5 @@
-import type { AnswerValue, Display, Question, QuestionType } from '../shared/protocol';
-import { ANIMALS, FORMATS, LIMITS, defaultQuestion } from '../shared/constants';
+import type { AnswerValue, Branding, Costume, CustomLeader, Display, Question, QuestionType, TeamPhoto } from '../shared/protocol';
+import { ANIMALS, COSTUMES, FORMATS, LIMITS, defaultQuestion } from '../shared/constants';
 
 // Control chars, zero-width chars (except ZWJ U+200D used by emoji), bidi overrides, BOM.
 const INVISIBLE = /[\u0000-\u001F\u007F-\u009F\u200B\u200C\u200E\u200F\u202A-\u202E\u2060-\u2064\uFEFF]/g;
@@ -107,4 +107,50 @@ export function parseQuestion(raw: unknown): Question | null {
   const d = o.display as Display;
   if (FORMATS[q.type].includes(d) && !(d === 'versus' && q.options.length !== 2)) q.display = d;
   return q;
+}
+
+export const MEDIA_ID_RE = /^[a-z0-9]{8,24}$/;
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+export function parseBranding(raw: unknown, hasMedia: (id: string) => boolean): Branding | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const appName = clean(o.appName);
+  const splashText = clean(o.splashText);
+  if (!appName || len(appName) > LIMITS.appName) return null;
+  if (!splashText || len(splashText) > LIMITS.splashText) return null;
+
+  let photos: TeamPhoto[] | null = null;
+  if (o.photos !== null && o.photos !== undefined) {
+    if (!Array.isArray(o.photos) || o.photos.length > LIMITS.photos) return null;
+    const seen = new Set<string>();
+    photos = [];
+    for (const item of o.photos) {
+      if (!item || typeof item !== 'object') return null;
+      const id = (item as Record<string, unknown>).id;
+      if (typeof id !== 'string' || !MEDIA_ID_RE.test(id) || !hasMedia(id)) return null;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      photos.push({ id });
+    }
+  }
+
+  let leaders: CustomLeader[] | null = null;
+  if (o.leaders !== null && o.leaders !== undefined) {
+    if (!Array.isArray(o.leaders) || o.leaders.length > LIMITS.leaders) return null;
+    leaders = [];
+    for (const item of o.leaders) {
+      if (!item || typeof item !== 'object') return null;
+      const l = item as Record<string, unknown>;
+      if (typeof l.costume !== 'string' || !(COSTUMES as readonly string[]).includes(l.costume)) return null;
+      if (typeof l.frontId !== 'string' || !MEDIA_ID_RE.test(l.frontId) || !hasMedia(l.frontId)) return null;
+      if (typeof l.backId !== 'string' || !MEDIA_ID_RE.test(l.backId) || !hasMedia(l.backId)) return null;
+      const id = typeof l.id === 'string' && /^[a-z0-9]{1,16}$/.test(l.id) ? l.id : '';
+      const name = cut(clean(l.name), LIMITS.leaderName);
+      const handColor = typeof l.handColor === 'string' && HEX_COLOR_RE.test(l.handColor) ? l.handColor.toLowerCase() : '#b57a5f';
+      leaders.push({ id, name, costume: l.costume as Costume, frontId: l.frontId, backId: l.backId, handColor });
+    }
+  }
+
+  return { appName, splashText, photos, leaders };
 }

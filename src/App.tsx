@@ -30,14 +30,31 @@ export default function App() {
 
 function GameApp() {
   const session = useGame((s) => s.session);
+  const appName = useGame((s) => s.branding.appName);
+  const brandingHeard = useGame((s) => s.brandingHeard);
   const presenter = location.pathname.startsWith('/present');
   // D12: people who already joined on this device skip the splash after a reload.
   const [entered, setEntered] = useState(() => client.state.session !== null);
+  // Wait briefly for live branding on a cold visit so customized portals never flash the default title or photos.
+  const [brandReady, setBrandReady] = useState(() => client.state.brandingHeard);
   // Audience phones start with one tap, so the splash gets its music. Hosts log in on laptops, which skip it, as do the
   // presenter screen and anyone already logged in.
   const [tapped, setTapped] = useState(
     () => presenter || client.state.session !== null || !matchMedia('(hover: none) and (pointer: coarse)').matches,
   );
+
+  useEffect(() => {
+    document.title = /\p{Extended_Pictographic}\s*$/u.test(appName) ? appName : `${appName} 🥳`;
+  }, [appName]);
+
+  useEffect(() => {
+    if (brandingHeard) {
+      setBrandReady(true);
+      return;
+    }
+    const id = setTimeout(() => setBrandReady(true), 1200);
+    return () => clearTimeout(id);
+  }, [brandingHeard]);
 
   // Back walks one stage back: game → (confirm) log out → join → splash.
   useEffect(() => {
@@ -73,6 +90,7 @@ function GameApp() {
     );
   }
   if (!tapped) return <TapToStart onStart={() => setTapped(true)} />;
+  if (!brandReady && !entered) return <Loading />;
   return (
     <>
       {!entered ? <Splash onEnter={() => setEntered(true)} /> : session ? <PlayerApp /> : <Join />}

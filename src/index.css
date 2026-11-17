@@ -75,6 +75,8 @@ input, textarea, select { font-size: 16px; } /* iOS zooms into smaller inputs */
   pointer-events: none;
 }
 .reel-big { bottom: calc(var(--band-w) * 0.27 + 1.5rem); }
+.reel-noband { bottom: calc(max(0.75rem, env(safe-area-inset-bottom)) + 6rem); }
+.reel-big.reel-noband { bottom: 1.5rem; }
 .reel-text {
   position: absolute;
   left: 0;

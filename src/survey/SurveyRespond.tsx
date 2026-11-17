@@ -100,11 +100,12 @@ function Done({ survey, again }: { survey: PublicSurvey; again: boolean }) {
 }
 
 export function Frame({ children }: { children: ReactNode }) {
+  const appName = useGame((s) => s.branding.appName);
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col px-4 py-6 sm:py-10">
       <div className="mb-4 flex items-center gap-2">
         <span className="w-9 shrink-0" aria-hidden />
-        <p className="flex-1 text-center text-sm font-bold tracking-wide uppercase opacity-80">📝 CorpFun Day · Feedback</p>
+        <p className="flex-1 text-center text-sm font-bold tracking-wide uppercase opacity-80">📝 {appName} · Feedback</p>
         <SoundToggle />
       </div>
       <div className="glass p-5 sm:p-8">{children}</div>

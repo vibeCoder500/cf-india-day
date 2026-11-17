@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from 'react';
 import { WebSocket as ReconnectingWebSocket } from 'partysocket';
-import type { AdminState, AnswerValue, ClientMsg, ErrorCode, ServerMsg, ViewMsg } from '../../shared/protocol';
+import type { AdminState, AnswerValue, Branding, ClientMsg, ErrorCode, ServerMsg, ViewMsg } from '../../shared/protocol';
 import type { AdminSurvey, PublicSurvey, SurveyAnswers, SurveyData } from '../../shared/survey';
+import { DEFAULT_BRANDING } from '../../shared/constants';
 import { clearDraft, clearDrafts } from '../survey/draft';
 import { deviceId } from './device';
 
@@ -16,6 +17,8 @@ export interface Session {
 export interface ClientState {
   status: 'connecting' | 'open' | 'closed';
   session: Session | null;
+  branding: Branding;
+  brandingHeard: boolean;
   view: ViewMsg | null;
   admin: AdminState | null;
   error: { code: ErrorCode; message: string; at: number } | null;
@@ -30,6 +33,29 @@ export interface ClientState {
 }
 
 const SESSION_KEY = 'cfid.session.v1';
+const BRANDING_KEY = 'cfid.branding.v1';
+
+function loadBranding(): { branding: Branding; heard: boolean } {
+  try {
+    const raw = localStorage.getItem(BRANDING_KEY);
+    if (!raw) return { branding: DEFAULT_BRANDING, heard: false };
+    const b = JSON.parse(raw) as Branding;
+    if (b && typeof b.appName === 'string' && typeof b.splashText === 'string') {
+      return { branding: b, heard: true };
+    }
+  } catch {
+    // ignore
+  }
+  return { branding: DEFAULT_BRANDING, heard: false };
+}
+
+function saveBranding(b: Branding) {
+  try {
+    localStorage.setItem(BRANDING_KEY, JSON.stringify(b));
+  } catch {
+    // ignore
+  }
+}
 
 // The survey site lives at /survey (respond, never logged in) and /surveyAdmin (the hosts' studio). Neither touches the
 // game: a phone's saved game session is left alone, and the studio only uses a host session.
@@ -79,10 +105,25 @@ const SURVEY_FRIENDLY: Partial<Record<ErrorCode, string>> = {
 // Not security-sensitive: only used to de-duplicate retried answers.
 const randomRef = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
+const INITIAL_BRANDING = loadBranding();
+
 class GameClient {
   state: ClientState = {
-    status: 'connecting', session: loadSession(), view: null, admin: null, error: null, offset: 0, pending: {},
-    survey: null, surveyHeard: false, surveyMe: {}, surveySending: null, surveys: null, surveyData: null,
+    status: 'connecting',
+    session: loadSession(),
+    branding: INITIAL_BRANDING.branding,
+    brandingHeard: INITIAL_BRANDING.heard,
+    view: null,
+    admin: null,
+    error: null,
+    offset: 0,
+    pending: {},
+    survey: null,
+    surveyHeard: false,
+    surveyMe: {},
+    surveySending: null,
+    surveys: null,
+    surveyData: null,
   };
   private listeners = new Set<() => void>();
   private rxListeners = new Set<(r: Record<string, number>) => void>();
@@ -173,6 +214,23 @@ class GameClient {
     this.set({ error: null });
   }
 
+  async uploadMedia(blob: Blob): Promise<{ id: string; url: string }> {
+    const token = this.state.session?.token ?? '';
+    const res = await fetch('/api/media', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': blob.type || 'image/webp',
+      },
+      body: blob,
+    });
+    const data = (await res.json().catch(() => null)) as { id?: string; url?: string; error?: string } | null;
+    if (!res.ok || !data?.id || !data?.url) {
+      throw new Error(data?.error || 'Upload failed');
+    }
+    return { id: data.id, url: data.url };
+  }
+
   // The survey site only: the server answers with survey:me (has this device responded?).
   surveyCheck() {
     const s = this.state.survey;
@@ -241,6 +299,10 @@ class GameClient {
     }
     const offset = 'now' in m ? m.now - Date.now() : this.state.offset;
     switch (m.t) {
+      case 'branding':
+        saveBranding(m.branding);
+        this.set({ branding: m.branding, brandingHeard: true, offset });
+        return;
       case 'welcome': {
         const session: Session = { token: m.token, role: m.role, id: m.id, name: m.name, avatar: m.avatar };
         saveSession(session);
