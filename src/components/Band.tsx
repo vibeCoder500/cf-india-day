@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { Costume, CustomLeader } from '../../shared/protocol';
 import { useGame } from '../lib/client';
 import { BEAT_MS, nextBeatAt, onMusicChange } from '../lib/music';
-import Caricature, { Arm, INK, Limb, actorsOf, headsReady, pivot, star } from './Caricature';
+import Caricature, { Arm, INK, Limb, actorsOf, areHeadsDecoded, headsReady, pivot, star } from './Caricature';
 
 const WOOD = '#7a4a26';
 
@@ -162,14 +162,24 @@ export default function Band({ big = false, leaders }: { big?: boolean; leaders?
   const savedLeaders = useGame((s) => s.branding.leaders);
   const actors = useMemo(() => actorsOf(leaders !== undefined ? leaders : savedLeaders), [leaders, savedLeaders]);
   const ref = useRef<HTMLDivElement>(null);
-  const [shown, setShown] = useState(false);
+  const [shown, setShown] = useState(() => areHeadsDecoded(actors));
 
   useEffect(() => {
+    if (areHeadsDecoded(actors)) {
+      setShown(true);
+      void headsReady(actors);
+      return;
+    }
     let live = true;
     setShown(false);
-    void headsReady(actors).then(() => live && setShown(true));
+    const fallback = setTimeout(() => live && setShown(true), 900);
+    void headsReady(actors).then(() => {
+      clearTimeout(fallback);
+      if (live) setShown(true);
+    });
     return () => {
       live = false;
+      clearTimeout(fallback);
     };
   }, [actors]);
 

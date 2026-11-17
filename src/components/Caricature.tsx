@@ -65,20 +65,33 @@ export function actorsOf(leaders: CustomLeader[] | null | undefined): readonly A
 }
 
 const decoded = new Map<string, Promise<void>>();
-function decodeOnce(src: string): Promise<void> {
+const decodedDone = new Set<string>();
+function decodeOnce(src: string, highPriority = false): Promise<void> {
   let p = decoded.get(src);
   if (!p) {
     const img = new Image();
+    img.decoding = 'async';
+    if (highPriority) img.fetchPriority = 'high';
     img.src = src;
-    p = img.decode().catch(() => undefined);
+    p = img
+      .decode()
+      .catch(() => undefined)
+      .then(() => {
+        decodedDone.add(src);
+      });
     decoded.set(src, p);
   }
   return p;
 }
 
-// Loads and decodes every head once, so nobody ever appears headless for a moment.
+export function areHeadsDecoded(actors: readonly Actor[] = DEFAULT_ACTORS): boolean {
+  return actors.every(({ front }) => decodedDone.has(front));
+}
+
+// Loads and decodes every front head first (prioritized for the splash band) while warming back silhouettes in parallel.
 export function headsReady(actors: readonly Actor[] = DEFAULT_ACTORS): Promise<void> {
-  return Promise.all(actors.flatMap(({ front, back }) => [decodeOnce(front), decodeOnce(back)])).then(() => undefined);
+  for (const { back } of actors) void decodeOnce(back, false);
+  return Promise.all(actors.map(({ front }) => decodeOnce(front, true))).then(() => undefined);
 }
 
 const ActorCtx = createContext<{ costume: Costume; sleeve: string; hand: string } | null>(null);

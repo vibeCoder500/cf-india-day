@@ -6,6 +6,8 @@ import TapToStart from './screens/TapToStart';
 import PlayerApp from './player/PlayerApp';
 import MusicToggle from './components/MusicToggle';
 import Zoomies from './components/Zoomies';
+import { actorsOf, headsReady } from './components/Caricature';
+import { preloadPhotos } from './components/PhotoReel';
 
 const AdminApp = lazy(() => import('./admin/AdminApp'));
 const PresenterApp = lazy(() => import('./presenter/PresenterApp'));
@@ -30,7 +32,8 @@ export default function App() {
 
 function GameApp() {
   const session = useGame((s) => s.session);
-  const appName = useGame((s) => s.branding.appName);
+  const branding = useGame((s) => s.branding);
+  const appName = branding.appName;
   const brandingHeard = useGame((s) => s.brandingHeard);
   const presenter = location.pathname.startsWith('/present');
   // D12: people who already joined on this device skip the splash after a reload.
@@ -52,9 +55,24 @@ function GameApp() {
       setBrandReady(true);
       return;
     }
-    const id = setTimeout(() => setBrandReady(true), 1200);
+    const id = setTimeout(() => setBrandReady(true), 500);
     return () => clearTimeout(id);
   }, [brandingHeard]);
+
+  // Eagerly warm & decode leader caricatures and revolving team photos during TapToStart / initial WS connect
+  // so the Splash screen paints with zero waiting once opened.
+  useEffect(() => {
+    const warm = () => {
+      void headsReady(actorsOf(branding.leaders));
+      if (!entered || presenter) preloadPhotos(branding.photos);
+    };
+    if (brandingHeard) {
+      warm();
+      return;
+    }
+    const id = setTimeout(warm, 180);
+    return () => clearTimeout(id);
+  }, [branding.leaders, branding.photos, brandingHeard, entered, presenter]);
 
   // Back walks one stage back: game → (confirm) log out → join → splash.
   useEffect(() => {

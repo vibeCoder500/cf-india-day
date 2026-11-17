@@ -11,6 +11,32 @@ export const DEFAULT_PHOTOS: readonly string[] = Object.values(
   import.meta.glob<string>('../assets/collage/*.{jpg,jpeg,png,webp,avif}', { eager: true, import: 'default' }),
 );
 
+// Retains decoded HTMLImageElements in memory so preloaded frames stay GPU-ready before Splash mounts.
+const preloadedPhotos = new Map<string, HTMLImageElement>();
+
+export function preloadPhotos(photos?: TeamPhoto[] | null): void {
+  const list = photos === null || photos === undefined ? DEFAULT_PHOTOS : photos.map((p) => mediaUrl(p.id));
+  const n = list.length;
+  if (n === 0) return;
+  // Order matches PhotoReel's intro spin: card 0 starts in front, then cards n-1, n-2, ... sweep across the camera first.
+  const order: number[] = [0];
+  for (let step = 1; order.length < n; step++) {
+    const hi = n - step;
+    if (hi > 0 && hi < n && !order.includes(hi)) order.push(hi);
+    if (step < n && !order.includes(step)) order.push(step);
+  }
+  order.forEach((idx, rank) => {
+    const src = list[idx];
+    if (!src || preloadedPhotos.has(src)) return;
+    const img = new Image();
+    img.decoding = 'async';
+    if (rank < 3) img.fetchPriority = 'high';
+    img.src = src;
+    preloadedPhotos.set(src, img);
+    void img.decode().catch(() => undefined);
+  });
+}
+
 const TAU = 2 * Math.PI;
 const rad = (deg: number) => (deg * Math.PI) / 180;
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
@@ -221,8 +247,8 @@ export default function PhotoReel({
           `perspective(${((CAMERA - p.z) * r).toFixed(0)}px) rotate(${(roll + sway).toFixed(4)}rad) ` +
           `rotateX(${(tau / 2 + nod).toFixed(4)}rad) rotateY(${phi.toFixed(4)}rad) rotateX(${flip.toFixed(4)}rad)`;
         // Far photos fade into the dark, so the text stays readable over the (mirrored) backs passing behind it.
-        // Each photo also fades in once it has downloaded, instead of showing an empty frame.
-        if (loadedAt[i] < 0 && imgs[i].complete && imgs[i].naturalWidth > 0) loadedAt[i] = t;
+        // Preloaded photos start at full opacity immediately; late downloads fade in smoothly over 0.4s.
+        if (loadedAt[i] < 0 && imgs[i].complete && imgs[i].naturalWidth > 0) loadedAt[i] = t < 0.08 ? -0.4 : t;
         const loaded = still ? 1 : loadedAt[i] < 0 ? 0 : clamp01((t - loadedAt[i]) / 0.4);
         const near = clamp01((p.z / (radius * Math.cos(tau)) + 1) / 2);
         cards[i].style.opacity = (clamp01(born / 0.3) * loaded * (0.28 + 0.72 * smooth(near))).toFixed(3);
@@ -282,7 +308,9 @@ export default function PhotoReel({
               src={src}
               alt=""
               draggable={false}
+              loading="eager"
               decoding="async"
+              fetchPriority={i === 0 || i >= list.length - 2 ? 'high' : 'auto'}
               style={{ animationDelay: `${-i * 2.3}s`, animationDirection: i % 2 ? 'alternate-reverse' : 'alternate' }}
             />
             <div className="reel-glint" />

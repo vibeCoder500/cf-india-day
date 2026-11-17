@@ -116,7 +116,7 @@ function hexToRgb(hex: string): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-async function decodeToCanvas(blob: Blob, maxDim: number): Promise<HTMLCanvasElement> {
+async function decodeToCanvas(blob: Blob, maxWidth: number, maxHeight = maxWidth): Promise<HTMLCanvasElement> {
   let width = 0;
   let height = 0;
   let drawSource: CanvasImageSource;
@@ -143,7 +143,7 @@ async function decodeToCanvas(blob: Blob, maxDim: number): Promise<HTMLCanvasEle
   }
 
   try {
-    const scale = Math.min(1, maxDim / Math.max(width, height, 1));
+    const scale = Math.min(1, maxWidth / Math.max(width, 1), maxHeight / Math.max(height, 1));
     const cw = Math.max(1, Math.round(width * scale));
     const ch = Math.max(1, Math.round(height * scale));
     const canvas = document.createElement('canvas');
@@ -166,8 +166,10 @@ async function canvasToWebp(canvas: HTMLCanvasElement, quality = 0.86): Promise<
 }
 
 export async function compressTeamPhoto(file: Blob): Promise<Blob> {
-  const canvas = await decodeToCanvas(file, 1280);
-  return canvasToWebp(canvas, 0.84);
+  // PhotoReel displays every frame at ~110–200px CSS height (~350–450px physical peak at front of ring),
+  // so bounding to 840 × 480 @ 0.77 keeps custom photos crisp at ~30–65 KB instead of ~200–350 KB.
+  const canvas = await decodeToCanvas(file, 840, 480);
+  return canvasToWebp(canvas, 0.77);
 }
 
 function sampleMaskBilinear(mask: Float32Array, mw: number, mh: number, u: number, v: number): number {
